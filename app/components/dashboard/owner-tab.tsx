@@ -22,8 +22,6 @@ import {
   TrendingUp,
   PackageCheck,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   FileSpreadsheet,
   FileDown,
 } from "lucide-react";
@@ -48,8 +46,7 @@ export function OwnerDashboard({
   statuses: ItemStatus[];
   logs: StockLog[];
 }) {
-  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | null>(null);
-  const [expandedGood, setExpandedGood] = useState(false);
+  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | "allGood" | null>(null);
 
   const habisItems = statuses.filter((s) => s.currentStock <= 0 || s.isOverdue);
   const menipisItems = statuses.filter(
@@ -68,6 +65,9 @@ export function OwnerDashboard({
   }
   if (drillDown === "menipis") {
     return <MenipisDrillDown items={menipisItems} onBack={() => setDrillDown(null)} />;
+  }
+  if (drillDown === "allGood") {
+    return <AllGoodDrillDown items={goodItems} onBack={() => setDrillDown(null)} />;
   }
   if (drillDown === "staff") {
     return <StaffDrillDown logs={logs} onBack={() => setDrillDown(null)} />;
@@ -98,7 +98,7 @@ export function OwnerDashboard({
 
       <StaffSection logs={logs} onDrillDown={() => setDrillDown("staff")} />
 
-      <AllGoodSection items={goodItems} expanded={expandedGood} onToggle={() => setExpandedGood((v) => !v)} />
+      <AllGoodSection items={goodItems} onDrillDown={() => setDrillDown("allGood")} />
     </div>
   );
 }
@@ -509,41 +509,39 @@ function StaffSection({ logs, onDrillDown }: { logs: StockLog[]; onDrillDown: ()
 
 function AllGoodSection({
   items,
-  expanded,
-  onToggle,
+  onDrillDown,
 }: {
   items: ItemStatus[];
-  expanded: boolean;
-  onToggle: () => void;
+  onDrillDown: () => void;
 }) {
+  const visible = items.slice(0, 3);
+
   return (
     <div className="rounded-xl border border-green-200 bg-green-50/50 p-3 text-green-900 dark:bg-green-950/30 dark:border-green-900 dark:text-green-100">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between text-sm"
-      >
-        <span className="font-medium flex items-center gap-2">
-          <PackageCheck className="h-4 w-4" />
-          {items.length} item aman
-        </span>
-        {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-      </button>
+      <div className="flex items-center gap-2 mb-3">
+        <PackageCheck className="h-4 w-4" />
+        <span className="font-medium text-sm">{items.length} item aman</span>
+      </div>
 
-      {expanded && (
-        <div className="mt-3 space-y-2">
-          {items.slice(0, 4).map((s) => (
-            <div
-              key={s.item.id}
-              className="flex items-center justify-between text-sm rounded-lg bg-white/60 dark:bg-green-950/40 p-2"
-            >
-              <span>{s.item.name}</span>
-              <span className="opacity-70">{s.currentStock} {s.item.unit}</span>
-            </div>
-          ))}
-          {items.length > 4 && (
-            <p className="text-xs text-center opacity-70">+{items.length - 4} item aman lainnya</p>
-          )}
-        </div>
+      <div className="space-y-2">
+        {visible.map((s) => (
+          <div
+            key={s.item.id}
+            className="flex items-center justify-between text-sm rounded-lg bg-white/60 dark:bg-green-950/40 p-2"
+          >
+            <span>{s.item.name}</span>
+            <span className="opacity-70">{s.currentStock} {s.item.unit}</span>
+          </div>
+        ))}
+      </div>
+
+      {items.length > 3 && (
+        <button
+          onClick={onDrillDown}
+          className="w-full text-center text-xs font-semibold text-green-700 dark:text-green-200 py-2 mt-2"
+        >
+          Lihat {items.length - 3} item aman lainnya →
+        </button>
       )}
     </div>
   );
@@ -619,6 +617,34 @@ function MenipisDrillDown({
                   <h3 className="font-bold">{s.item.name}</h3>
                   <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
                 </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AllGoodDrillDown({ items, onBack }: { items: ItemStatus[]; onBack: () => void }) {
+  return (
+    <div className="space-y-4">
+      <DrillDownHeader title="Item Aman" onBack={onBack} />
+      {items.length === 0 ? (
+        <p className="text-center py-12 text-muted-foreground">Tidak ada item aman.</p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((s) => (
+            <Card
+              key={s.item.id}
+              className="border-green-200 bg-green-50 text-green-950 dark:bg-green-950 dark:border-green-900 dark:text-green-100"
+            >
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold">{s.item.name}</h3>
+                  <p className="text-xs opacity-80">{s.item.category}</p>
+                </div>
+                <span className="text-sm font-semibold">{s.currentStock} {s.item.unit}</span>
               </CardContent>
             </Card>
           ))}
