@@ -27,6 +27,8 @@ import {
   ChevronUp,
   FileSpreadsheet,
   FileDown,
+  Check,
+  Square,
 } from "lucide-react";
 import { ItemStatus, StockLog } from "@/app/types";
 import {
@@ -743,6 +745,7 @@ function MenipisDrillDown({
 
 function ShoppingListDrillDown({ onBack }: { onBack: () => void }) {
   const [ids, setIds] = useState<string[]>([]);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setIds(getShoppingIds());
@@ -754,14 +757,45 @@ function ShoppingListDrillDown({ onBack }: { onBack: () => void }) {
     return map;
   }, []);
 
+  const syncIds = () => {
+    const next = getShoppingIds();
+    setIds(next);
+    setCheckedIds((prev) => {
+      const filtered = new Set(prev);
+      next.forEach((id) => filtered.delete(id));
+      return filtered;
+    });
+  };
+
+  const handleCheck = (id: string) => {
+    const name = itemMap.get(id) || id;
+    setCheckedIds((prev) => new Set(prev).add(id));
+    setTimeout(() => {
+      removeFromShoppingById(id);
+      syncIds();
+      toast.success(`${name} ditandai sudah dibeli.`);
+    }, 350);
+  };
+
+  const handleCheckAll = () => {
+    setCheckedIds(new Set(ids));
+    setTimeout(() => {
+      clearShoppingList();
+      setIds([]);
+      setCheckedIds(new Set());
+      toast.success(`${ids.length} item ditandai sudah dibeli.`);
+    }, 350);
+  };
+
   const handleRemove = (id: string) => {
     removeFromShoppingById(id);
-    setIds(getShoppingIds());
+    syncIds();
   };
 
   const handleClear = () => {
     clearShoppingList();
     setIds([]);
+    setCheckedIds(new Set());
     toast.info("Daftar belanja dikosongkan.");
   };
 
@@ -777,20 +811,57 @@ function ShoppingListDrillDown({ onBack }: { onBack: () => void }) {
       ) : (
         <>
           <div className="space-y-3">
-            {ids.map((id) => (
-              <Card key={id}>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <span className="font-bold">{itemMap.get(id) || id}</span>
-                  <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => handleRemove(id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+            {ids.map((id) => {
+              const checked = checkedIds.has(id);
+              return (
+                <Card
+                  key={id}
+                  className={`transition-all duration-300 ${checked ? "opacity-60" : ""}`}
+                >
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <button
+                      onClick={() => handleCheck(id)}
+                      disabled={checked}
+                      className="shrink-0 rounded-md p-1 text-purple-600 hover:bg-purple-100 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+                      aria-label="Tandai sudah dibeli"
+                    >
+                      {checked ? (
+                        <Check className="h-6 w-6" />
+                      ) : (
+                        <Square className="h-6 w-6" />
+                      )}
+                    </button>
+                    <span className={`font-bold flex-1 ${checked ? "line-through text-muted-foreground" : ""}`}>
+                      {itemMap.get(id) || id}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-muted-foreground shrink-0"
+                      onClick={() => handleRemove(id)}
+                      disabled={checked}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
-          <Button variant="outline" className="w-full" onClick={handleClear}>
-            Kosongkan Daftar
-          </Button>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="outline"
+              className="w-full border-purple-500 text-purple-700 hover:bg-purple-100 dark:text-purple-100 dark:hover:bg-purple-900"
+              onClick={handleCheckAll}
+              disabled={ids.length === 0}
+            >
+              <Check className="h-4 w-4 mr-1" />
+              Checklist Semua
+            </Button>
+            <Button variant="outline" className="w-full" onClick={handleClear}>
+              Kosongkan Daftar
+            </Button>
+          </div>
         </>
       )}
     </div>
@@ -808,11 +879,12 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
     return map;
   }, []);
 
-  const recentChecks = logs
-    .filter((l) => l.type === "check")
-    .sort((a, b) => b.createdAt - a.createdAt);
+  const recentActivities = useMemo(
+    () => [...logs].sort((a, b) => b.createdAt - a.createdAt),
+    [logs]
+  );
 
-  const filtered = recentChecks.filter((l) => {
+  const filtered = recentActivities.filter((l) => {
     if (!search.trim()) return true;
     const name = (itemMap.get(l.itemId) || "").toLowerCase();
     return name.includes(search.toLowerCase()) || (l.recordedBy || "").toLowerCase().includes(search.toLowerCase());
@@ -841,7 +913,7 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
         className="h-12"
       />
       <div className="space-y-3">
-        {filtered.slice(0, 20).map((log) => (
+        {filtered.slice(0, 30).map((log) => (
           <Card key={log.id} className={log.date === today ? "border-primary" : ""}>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
@@ -851,7 +923,7 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline">{log.qty}</Badge>
+                <LogTypeBadge log={log} />
                 <Button
                   size="icon"
                   variant="ghost"
@@ -868,6 +940,36 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
       </div>
     </div>
   );
+}
+
+function LogTypeBadge({ log }: { log: StockLog }) {
+  switch (log.type) {
+    case "in":
+      return (
+        <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:border-emerald-900">
+          +{log.qty} Masuk
+        </Badge>
+      );
+    case "add":
+      return (
+        <Badge variant="outline" className="text-xs bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-100 dark:border-violet-900">
+          Tambah
+        </Badge>
+      );
+    case "archive":
+      return (
+        <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-100 dark:border-red-900">
+          Hapus
+        </Badge>
+      );
+    case "check":
+    default:
+      return (
+        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-100 dark:border-blue-900">
+          {log.qty} Cek
+        </Badge>
+      );
+  }
 }
 
 export const OwnerTab = OwnerDashboard;

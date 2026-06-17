@@ -1,4 +1,4 @@
-export type StockLogType = "in" | "check";
+export type StockLogType = "in" | "check" | "add" | "archive";
 
 export interface StockLog {
   id: string;

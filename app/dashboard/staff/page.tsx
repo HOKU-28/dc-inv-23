@@ -22,11 +22,14 @@ import {
   LogOut,
   Sun,
   Moon,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { Item, ItemStatus } from "@/app/types";
 import {
   addItem,
   addLog,
+  archiveItem,
   frequencyLabel,
   getActiveItems,
   getItemStatus,
@@ -107,9 +110,11 @@ export default function StaffDashboardPage() {
     if (item) {
       setScannedItemId(item.id);
       setScannedBarcode(barcode);
+      toast.success(`Barcode ditemukan: ${item.name}`);
     } else {
       setScannedItemId(null);
       setScannedBarcode(barcode);
+      toast.info("Barcode tidak ditemukan. Tambahkan item baru.");
     }
   };
 
@@ -375,6 +380,7 @@ function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => voi
   const [qty, setQty] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = () => {
@@ -392,12 +398,36 @@ function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => voi
     setSaving(false);
     setSaved(true);
     triggerFeedback("success");
+    toast.success(`Cek stok ${status.item.name} tersimpan.`);
     onSaved();
     setTimeout(() => {
       setSaved(false);
       setQty("");
       inputRef.current?.focus();
     }, 900);
+  };
+
+  const handleDelete = () => {
+    if (!confirm(`Hapus item "${status.item.name}"? Item yang sudah dihapus tidak akan muncul lagi di daftar aktif.`)) return;
+    setDeleting(true);
+    try {
+      archiveItem(status.item.id);
+      const session = getSession();
+      addLog({
+        itemId: status.item.id,
+        type: "archive",
+        qty: 0,
+        date: todayStr(),
+        recordedBy: session?.name,
+        note: "Item dihapus/diarsipkan",
+      });
+      toast.success(`"${status.item.name}" berhasil dihapus.`);
+      onSaved();
+    } catch {
+      toast.error("Gagal menghapus item.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const urgent = status.isOverdue;
@@ -411,9 +441,21 @@ function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => voi
           <h3 className="text-lg font-bold leading-tight">{status.item.name}</h3>
           <p className="text-xs text-muted-foreground">{frequencyLabel(status.item)}</p>
         </div>
-        {urgent && <Badge variant="destructive" className="text-xs">Lewat</Badge>}
-        {dueToday && !urgent && <Badge variant="secondary" className="text-xs bg-amber-500 text-white dark:bg-amber-700">Hari ini</Badge>}
-        {dueTomorrow && !urgent && !dueToday && <Badge className="text-xs bg-blue-500 text-white dark:bg-blue-600">Besok</Badge>}
+        <div className="flex items-center gap-1 shrink-0">
+          {urgent && <Badge variant="destructive" className="text-xs">Lewat</Badge>}
+          {dueToday && !urgent && <Badge variant="secondary" className="text-xs bg-amber-500 text-white dark:bg-amber-700">Hari ini</Badge>}
+          {dueTomorrow && !urgent && !dueToday && <Badge className="text-xs bg-blue-500 text-white dark:bg-blue-600">Besok</Badge>}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-muted-foreground hover:text-red-600"
+            onClick={handleDelete}
+            disabled={deleting}
+            aria-label="Hapus item"
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -486,6 +528,8 @@ function StockInTask({
     setSaving(false);
     setSaved(true);
     triggerFeedback("success");
+    const itemName = items.find((i) => i.id === itemId)?.name || "Item";
+    toast.success(`Stok masuk ${itemName} tersimpan.`);
     onSaved();
     setTimeout(() => {
       setSaved(false);
@@ -579,7 +623,7 @@ function AddItemTask({
   const handleSave = () => {
     if (!canSave) return;
     setSaving(true);
-    addItem({
+    const newItem = addItem({
       name: name.trim(),
       unit: unit.trim(),
       category: category.trim(),
@@ -587,9 +631,19 @@ function AddItemTask({
       checkFrequencyDays: frequency,
       barcode: barcode.trim() || undefined,
     });
+    const session = getSession();
+    addLog({
+      itemId: newItem.id,
+      type: "add",
+      qty: 0,
+      date: todayStr(),
+      recordedBy: session?.name,
+      note: "Item baru ditambahkan",
+    });
     setSaving(false);
     setSaved(true);
     triggerFeedback("success");
+    toast.success(`Item ${newItem.name} berhasil ditambahkan.`);
     onSaved();
     setTimeout(() => {
       setSaved(false);
