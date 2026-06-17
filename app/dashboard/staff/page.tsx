@@ -756,7 +756,7 @@ function AddItemTask({
         <Input
           value={barcode}
           onChange={(e) => setBarcode(e.target.value)}
-          placeholder="Scan atau ketik barcode"
+          placeholder="Ketik barcode"
           className="h-14 text-base"
         />
       </div>
