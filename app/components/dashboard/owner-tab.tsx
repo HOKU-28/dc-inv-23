@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,6 @@ import {
   Users,
   Trash2,
   Loader2,
-  ShoppingCart,
   TrendingUp,
   PackageCheck,
   CheckCircle2,
@@ -27,8 +26,6 @@ import {
   ChevronUp,
   FileSpreadsheet,
   FileDown,
-  Check,
-  Square,
 } from "lucide-react";
 import { ItemStatus, StockLog } from "@/app/types";
 import {
@@ -42,12 +39,6 @@ import {
   getYearlyUsage,
   todayStr,
 } from "@/app/lib/data";
-import {
-  addToShoppingById,
-  clearShoppingList,
-  getShoppingIds,
-  removeFromShoppingById,
-} from "@/app/lib/shopping-list";
 import { toast } from "sonner";
 
 export function OwnerDashboard({
@@ -57,55 +48,26 @@ export function OwnerDashboard({
   statuses: ItemStatus[];
   logs: StockLog[];
 }) {
-  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "shopping" | "staff" | null>(null);
+  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | null>(null);
   const [expandedGood, setExpandedGood] = useState(false);
-  const [shoppingIds, setShoppingIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    setShoppingIds(getShoppingIds());
-  }, []);
-
-  const refreshShopping = () => setShoppingIds(getShoppingIds());
-
-  const rawHabisItems = statuses.filter((s) => s.currentStock <= 0 || s.isOverdue);
-  const rawMenipisItems = statuses.filter(
+  const habisItems = statuses.filter((s) => s.currentStock <= 0 || s.isOverdue);
+  const menipisItems = statuses.filter(
     (s) =>
       s.currentStock > 0 &&
       !s.isOverdue &&
       (s.isLow || s.currentStock <= s.item.minStock * 0.5)
   );
 
-  // Hapus item dari daftar belanja yang sudah tidak habis/menipis lagi
-  useEffect(() => {
-    const activeIds = new Set([
-      ...rawHabisItems.map((s) => s.item.id),
-      ...rawMenipisItems.map((s) => s.item.id),
-    ]);
-    const keepIds = shoppingIds.filter((id) => activeIds.has(id));
-    if (keepIds.length !== shoppingIds.length) {
-      const removed = shoppingIds.filter((id) => !activeIds.has(id));
-      removed.forEach((id) => removeFromShoppingById(id));
-      setShoppingIds(keepIds);
-    }
-  }, [shoppingIds, rawHabisItems, rawMenipisItems]);
-
-  const notInShopping = statuses.filter((s) => !shoppingIds.includes(s.item.id));
-
-  const habisItems = notInShopping.filter((s) => rawHabisItems.some((h) => h.item.id === s.item.id));
-  const menipisItems = notInShopping.filter((s) => rawMenipisItems.some((m) => m.item.id === s.item.id));
-
   const goodItems = statuses.filter((s) => !s.isLow && !s.isOverdue);
 
   const hasActions = habisItems.length > 0 || menipisItems.length > 0;
 
-  if (drillDown === "shopping") {
-    return <ShoppingListDrillDown onBack={() => { setDrillDown(null); refreshShopping(); }} />;
-  }
   if (drillDown === "habis") {
-    return <HabisDrillDown items={habisItems} onBack={() => setDrillDown(null)} onRefresh={refreshShopping} />;
+    return <HabisDrillDown items={habisItems} onBack={() => setDrillDown(null)} />;
   }
   if (drillDown === "menipis") {
-    return <MenipisDrillDown items={menipisItems} onBack={() => setDrillDown(null)} onRefresh={refreshShopping} />;
+    return <MenipisDrillDown items={menipisItems} onBack={() => setDrillDown(null)} />;
   }
   if (drillDown === "staff") {
     return <StaffDrillDown logs={logs} onBack={() => setDrillDown(null)} />;
@@ -122,16 +84,12 @@ export function OwnerDashboard({
         <ZeroStateCard goodCount={goodItems.length} />
       )}
 
-      {shoppingIds.length > 0 && (
-        <ShoppingListSection count={shoppingIds.length} onDrillDown={() => setDrillDown("shopping")} />
-      )}
-
       {habisItems.length > 0 && (
-        <HabisSection items={habisItems} onDrillDown={() => setDrillDown("habis")} onMoved={refreshShopping} />
+        <HabisSection items={habisItems} onDrillDown={() => setDrillDown("habis")} />
       )}
 
       {menipisItems.length > 0 && (
-        <MenipisSection items={menipisItems} onDrillDown={() => setDrillDown("menipis")} onMoved={refreshShopping} />
+        <MenipisSection items={menipisItems} onDrillDown={() => setDrillDown("menipis")} />
       )}
 
       <InsightSection statuses={statuses} logs={logs} />
@@ -169,37 +127,12 @@ function ZeroStateCard({ goodCount }: { goodCount: number }) {
   );
 }
 
-function ShoppingListSection({ count, onDrillDown }: { count: number; onDrillDown: () => void }) {
-  return (
-    <div
-      onClick={onDrillDown}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onDrillDown()}
-      className="rounded-2xl border border-purple-200 bg-purple-50 p-4 text-purple-950 transition-transform active:scale-[0.98] dark:bg-purple-950 dark:border-purple-900 dark:text-purple-100"
-    >
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-full bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300">
-          <ShoppingCart className="h-6 w-6" />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-bold leading-tight">{count} item di daftar belanja</h3>
-          <p className="text-sm opacity-80">Siap dipesan ke supplier</p>
-        </div>
-        <span className="text-sm font-semibold opacity-80">→</span>
-      </div>
-    </div>
-  );
-}
-
 function HabisSection({
   items,
   onDrillDown,
-  onMoved,
 }: {
   items: ItemStatus[];
   onDrillDown: () => void;
-  onMoved: () => void;
 }) {
   const visible = items.slice(0, 3);
 
@@ -211,7 +144,7 @@ function HabisSection({
         </div>
         <div>
           <h3 className="text-lg font-bold leading-tight">{items.length} item habis</h3>
-          <p className="text-sm opacity-80">Pesan segera agar operasional tidak terganggu</p>
+          <p className="text-sm opacity-80">Item dalam kondisi habis</p>
         </div>
       </div>
 
@@ -226,17 +159,6 @@ function HabisSection({
                 <p className="font-bold">{s.item.name}</p>
                 <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
               </div>
-              <Button
-                size="sm"
-                className="h-10 px-3 bg-red-600 hover:bg-red-700 text-white shrink-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  addToShoppingById(s.item.id, s.item.name);
-                  onMoved();
-                }}
-              >
-                Pesan Sekarang
-              </Button>
             </div>
           </div>
         ))}
@@ -257,11 +179,9 @@ function HabisSection({
 function MenipisSection({
   items,
   onDrillDown,
-  onMoved,
 }: {
   items: ItemStatus[];
   onDrillDown: () => void;
-  onMoved: () => void;
 }) {
   const visible = items.slice(0, 3);
 
@@ -273,7 +193,7 @@ function MenipisSection({
         </div>
         <div>
           <h3 className="text-lg font-bold leading-tight">{items.length} item mulai menipis</h3>
-          <p className="text-sm opacity-80">Pertimbangkan untuk dibeli minggu ini</p>
+          <p className="text-sm opacity-80">Item stoknya mulai menipis</p>
         </div>
       </div>
 
@@ -288,18 +208,6 @@ function MenipisSection({
                 <p className="font-bold">{s.item.name}</p>
                 <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 px-3 border-orange-500 text-orange-700 hover:bg-orange-100 dark:text-orange-100 dark:hover:bg-orange-900 shrink-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  addToShoppingById(s.item.id, s.item.name);
-                  onMoved();
-                }}
-              >
-                + Daftar Belanja
-              </Button>
             </div>
           </div>
         ))}
@@ -657,11 +565,9 @@ function DrillDownHeader({ title, onBack }: { title: string; onBack: () => void 
 function HabisDrillDown({
   items,
   onBack,
-  onRefresh,
 }: {
   items: ItemStatus[];
   onBack: () => void;
-  onRefresh: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -675,20 +581,11 @@ function HabisDrillDown({
               key={s.item.id}
               className="border-red-200 bg-red-50 text-red-950 dark:bg-red-950 dark:border-red-900 dark:text-red-100"
             >
-              <CardContent className="p-4 space-y-3">
+              <CardContent className="p-4">
                 <div>
                   <h3 className="font-bold">{s.item.name}</h3>
                   <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
                 </div>
-                <Button
-                  className="w-full h-12 bg-red-600 hover:bg-red-700 text-white"
-                  onClick={() => {
-                    addToShoppingById(s.item.id, s.item.name);
-                    onRefresh();
-                  }}
-                >
-                  Pesan Sekarang
-                </Button>
               </CardContent>
             </Card>
           ))}
@@ -701,11 +598,9 @@ function HabisDrillDown({
 function MenipisDrillDown({
   items,
   onBack,
-  onRefresh,
 }: {
   items: ItemStatus[];
   onBack: () => void;
-  onRefresh: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -719,150 +614,15 @@ function MenipisDrillDown({
               key={s.item.id}
               className="border-orange-200 bg-orange-50 text-orange-950 dark:bg-orange-950 dark:border-orange-900 dark:text-orange-100"
             >
-              <CardContent className="p-4 space-y-3">
+              <CardContent className="p-4">
                 <div>
                   <h3 className="font-bold">{s.item.name}</h3>
                   <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
                 </div>
-                <Button
-                  variant="outline"
-                  className="w-full h-12 border-orange-500 text-orange-700 hover:bg-orange-100 dark:text-orange-100 dark:hover:bg-orange-900"
-                  onClick={() => {
-                    addToShoppingById(s.item.id, s.item.name);
-                    onRefresh();
-                  }}
-                >
-                  Tambah ke Daftar Belanja
-                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
-      )}
-    </div>
-  );
-}
-
-function ShoppingListDrillDown({ onBack }: { onBack: () => void }) {
-  const [ids, setIds] = useState<string[]>([]);
-  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    setIds(getShoppingIds());
-  }, []);
-
-  const itemMap = useMemo(() => {
-    const map = new Map<string, string>();
-    getItems().forEach((item) => map.set(item.id, item.name));
-    return map;
-  }, []);
-
-  const syncIds = () => {
-    const next = getShoppingIds();
-    setIds(next);
-    setCheckedIds((prev) => {
-      const filtered = new Set(prev);
-      next.forEach((id) => filtered.delete(id));
-      return filtered;
-    });
-  };
-
-  const handleCheck = (id: string) => {
-    const name = itemMap.get(id) || id;
-    setCheckedIds((prev) => new Set(prev).add(id));
-    setTimeout(() => {
-      removeFromShoppingById(id);
-      syncIds();
-      toast.success(`${name} ditandai sudah dibeli.`);
-    }, 350);
-  };
-
-  const handleCheckAll = () => {
-    setCheckedIds(new Set(ids));
-    setTimeout(() => {
-      clearShoppingList();
-      setIds([]);
-      setCheckedIds(new Set());
-      toast.success(`${ids.length} item ditandai sudah dibeli.`);
-    }, 350);
-  };
-
-  const handleRemove = (id: string) => {
-    removeFromShoppingById(id);
-    syncIds();
-  };
-
-  const handleClear = () => {
-    clearShoppingList();
-    setIds([]);
-    setCheckedIds(new Set());
-    toast.info("Daftar belanja dikosongkan.");
-  };
-
-  return (
-    <div className="space-y-4">
-      <DrillDownHeader title="Daftar Belanja" onBack={onBack} />
-
-      {ids.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Daftar belanja kosong.</p>
-        </div>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {ids.map((id) => {
-              const checked = checkedIds.has(id);
-              return (
-                <Card
-                  key={id}
-                  className={`transition-all duration-300 ${checked ? "opacity-60" : ""}`}
-                >
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <button
-                      onClick={() => handleCheck(id)}
-                      disabled={checked}
-                      className="shrink-0 rounded-md p-1 text-purple-600 hover:bg-purple-100 disabled:opacity-50 disabled:pointer-events-none transition-colors"
-                      aria-label="Tandai sudah dibeli"
-                    >
-                      {checked ? (
-                        <Check className="h-6 w-6" />
-                      ) : (
-                        <Square className="h-6 w-6" />
-                      )}
-                    </button>
-                    <span className={`font-bold flex-1 ${checked ? "line-through text-muted-foreground" : ""}`}>
-                      {itemMap.get(id) || id}
-                    </span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-muted-foreground shrink-0"
-                      onClick={() => handleRemove(id)}
-                      disabled={checked}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              variant="outline"
-              className="w-full border-purple-500 text-purple-700 hover:bg-purple-100 dark:text-purple-100 dark:hover:bg-purple-900"
-              onClick={handleCheckAll}
-              disabled={ids.length === 0}
-            >
-              <Check className="h-4 w-4 mr-1" />
-              Checklist Semua
-            </Button>
-            <Button variant="outline" className="w-full" onClick={handleClear}>
-              Kosongkan Daftar
-            </Button>
-          </div>
-        </>
       )}
     </div>
   );

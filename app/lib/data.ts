@@ -202,7 +202,13 @@ export function addLog(log: Omit<StockLog, "id" | "createdAt">): StockLog {
   logs.push(newLog);
   saveLogs(logs);
   if (log.type === "in") {
-    removeFromShoppingById(log.itemId);
+    const item = getItems().find((i) => i.id === log.itemId);
+    if (item) {
+      const status = getItemStatus(item, logs);
+      if (status.currentStock > item.minStock) {
+        removeFromShoppingById(log.itemId);
+      }
+    }
   }
   return newLog;
 }

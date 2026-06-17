@@ -30,7 +30,6 @@ import {
   addItem,
   addLog,
   archiveItem,
-  frequencyLabel,
   getActiveItems,
   getItemStatus,
   getItems,
@@ -331,12 +330,26 @@ function CheckTask({
 }) {
   const today = todayStr();
   const sorted = useMemo(() => {
+    const tomorrow = addDays(today, 1);
     let list = [...statuses]
-      .filter((s) => s.nextCheckDate && s.nextCheckDate <= addDays(today, 1))
+      .filter(
+        (s) =>
+          (s.nextCheckDate && s.nextCheckDate <= tomorrow) ||
+          s.currentStock <= 0 ||
+          s.isLow
+      )
       .sort((a, b) => {
-        const aScore = (a.isOverdue ? 0 : a.nextCheckDate === today ? 1 : 2) * 10 + a.item.name.localeCompare(b.item.name);
-        const bScore = (b.isOverdue ? 0 : b.nextCheckDate === today ? 1 : 2) * 10;
-        return aScore - bScore;
+        const priority = (s: ItemStatus) => {
+          if (s.currentStock <= 0) return 0; // habis
+          if (s.isLow) return 1; // menipis
+          if (s.isOverdue) return 2;
+          if (s.nextCheckDate === today) return 3;
+          if (s.nextCheckDate === tomorrow) return 4;
+          return 5;
+        };
+        const diff = priority(a) - priority(b);
+        if (diff !== 0) return diff;
+        return a.item.name.localeCompare(b.item.name);
       });
 
     if (preSelectedItemId) {
@@ -433,16 +446,20 @@ function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => voi
   const urgent = status.isOverdue;
   const dueToday = status.nextCheckDate === todayStr();
   const dueTomorrow = status.nextCheckDate === addDays(todayStr(), 1);
+  const isOutOfStock = status.currentStock <= 0;
+  const isLowStock = !isOutOfStock && status.isLow;
 
   return (
-    <div className="rounded-2xl border bg-card p-4 space-y-3 transition-colors">
+    <div className={`rounded-2xl border bg-card p-4 space-y-3 transition-colors ${isOutOfStock ? "border-red-300 bg-red-50/30 dark:bg-red-950/20" : isLowStock ? "border-orange-300 bg-orange-50/30 dark:bg-orange-950/20" : ""}`}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="text-lg font-bold leading-tight">{status.item.name}</h3>
-          <p className="text-xs text-muted-foreground">{frequencyLabel(status.item)}</p>
+          <p className="text-xs text-muted-foreground">{status.item.category}</p>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {urgent && <Badge variant="destructive" className="text-xs">Lewat</Badge>}
+        <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[55%]">
+          {isOutOfStock && <Badge variant="destructive" className="text-xs">Habis</Badge>}
+          {isLowStock && <Badge className="text-xs bg-orange-500 text-white dark:bg-orange-600">Menipis</Badge>}
+          {urgent && <Badge variant="outline" className="text-xs">Lewat</Badge>}
           {dueToday && !urgent && <Badge variant="secondary" className="text-xs bg-amber-500 text-white dark:bg-amber-700">Hari ini</Badge>}
           {dueTomorrow && !urgent && !dueToday && <Badge className="text-xs bg-blue-500 text-white dark:bg-blue-600">Besok</Badge>}
           <Button
