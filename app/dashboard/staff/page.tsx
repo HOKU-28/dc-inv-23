@@ -40,6 +40,8 @@ import { getSession, logout, requireAuth } from "@/app/lib/auth";
 import { DashboardSkeleton } from "@/app/components/skeletons";
 import { useTheme } from "@/app/components/theme-provider";
 import { BarcodeScanner } from "@/app/components/barcode-scanner";
+import { Pagination } from "@/app/components/pagination";
+import { usePagination } from "@/app/hooks/use-pagination";
 import { toast } from "sonner";
 
 const HOME_ACTIONS = [
@@ -363,6 +365,16 @@ function CheckTask({
     return list;
   }, [statuses, today, preSelectedItemId]);
 
+  const {
+    currentPage,
+    setCurrentPage,
+    totalItems,
+    totalPages,
+    paginatedData,
+    startIndex,
+    endIndex,
+  } = usePagination(sorted, { pageSize: 6 });
+
   if (sorted.length === 0) {
     return (
       <div className="text-center space-y-4 py-12">
@@ -383,10 +395,19 @@ function CheckTask({
         <Badge variant="secondary" className="text-sm px-3 py-1">{sorted.length} item</Badge>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {sorted.map((status) => (
+        {paginatedData.map((status) => (
           <CheckCard key={status.item.id} status={status} onSaved={onSaved} />
         ))}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        startIndex={startIndex}
+        endIndex={endIndex}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }
