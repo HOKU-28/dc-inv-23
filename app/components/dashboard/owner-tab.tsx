@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   FileDown,
+  UserCog,
 } from "lucide-react";
 import { ItemStatus, StockLog } from "@/app/types";
 import {
@@ -37,16 +38,22 @@ import {
   getYearlyUsage,
   todayStr,
 } from "@/app/lib/data";
+import { User } from "@/app/lib/auth";
 import { toast } from "sonner";
+import { StaffManagement } from "./staff-management";
 
 export function OwnerDashboard({
   statuses,
   logs,
+  users,
+  onUsersChange,
 }: {
   statuses: ItemStatus[];
   logs: StockLog[];
+  users: User[];
+  onUsersChange: () => void;
 }) {
-  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | "allGood" | null>(null);
+  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | "allGood" | "staffManagement" | null>(null);
 
   const habisItems = statuses.filter((s) => s.currentStock <= 0 || s.isOverdue);
   const menipisItems = statuses.filter(
@@ -71,6 +78,14 @@ export function OwnerDashboard({
   }
   if (drillDown === "staff") {
     return <StaffDrillDown logs={logs} onBack={() => setDrillDown(null)} />;
+  }
+  if (drillDown === "staffManagement") {
+    return (
+      <div className="space-y-4">
+        <DrillDownHeader title="Kelola Staff" onBack={() => setDrillDown(null)} />
+        <StaffManagement users={users} onUsersChange={onUsersChange} />
+      </div>
+    );
   }
 
   return (
@@ -97,6 +112,8 @@ export function OwnerDashboard({
       <RekapSection statuses={statuses} logs={logs} />
 
       <StaffSection logs={logs} onDrillDown={() => setDrillDown("staff")} />
+
+      <StaffManagementSection onDrillDown={() => setDrillDown("staffManagement")} />
 
       <AllGoodSection items={goodItems} onDrillDown={() => setDrillDown("allGood")} />
     </div>
@@ -157,7 +174,6 @@ function HabisSection({
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="font-bold">{s.item.name}</p>
-                <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
               </div>
             </div>
           </div>
@@ -507,6 +523,26 @@ function StaffSection({ logs, onDrillDown }: { logs: StockLog[]; onDrillDown: ()
   );
 }
 
+function StaffManagementSection({ onDrillDown }: { onDrillDown: () => void }) {
+  return (
+    <div
+      onClick={onDrillDown}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onDrillDown()}
+      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <UserCog className="h-5 w-5" />
+          <p className="text-sm font-medium">Kelola Staff</p>
+        </div>
+        <span className="text-xs font-semibold opacity-80">Detail Lengkap →</span>
+      </div>
+    </div>
+  );
+}
+
 function AllGoodSection({
   items,
   onDrillDown,
@@ -582,7 +618,7 @@ function HabisDrillDown({
               <CardContent className="p-4">
                 <div>
                   <h3 className="font-bold">{s.item.name}</h3>
-                  <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
+                  <p className="text-xs opacity-80">{s.item.category}</p>
                 </div>
               </CardContent>
             </Card>

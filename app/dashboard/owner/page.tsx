@@ -7,7 +7,7 @@ import { LogOut, Sun, Moon } from "lucide-react";
 import { Item, StockLog } from "@/app/types";
 import { getItems, getItemStatus, getLogs } from "@/app/lib/data";
 import { OwnerDashboard } from "@/app/components/dashboard/owner-tab";
-import { logout, requireAuth } from "@/app/lib/auth";
+import { logout, requireAuth, getUsers, User } from "@/app/lib/auth";
 import { DashboardSkeleton } from "@/app/components/skeletons";
 import { useTheme } from "@/app/components/theme-provider";
 import { ErrorBoundary } from "@/app/components/error-boundary";
@@ -18,11 +18,16 @@ export default function OwnerDashboardPage() {
   const { resolvedTheme, setTheme } = useTheme();
   const [items, setItems] = useState<Item[]>([]);
   const [logs, setLogs] = useState<StockLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [mounted, setMounted] = useState(false);
 
   const refresh = () => {
     setItems(getItems());
     setLogs(getLogs());
+  };
+
+  const refreshUsers = () => {
+    setUsers(getUsers());
   };
 
   useEffect(() => {
@@ -33,6 +38,7 @@ export default function OwnerDashboardPage() {
     }
     setMounted(true);
     refresh();
+    refreshUsers();
   }, [router]);
 
   const statuses = useMemo(() => items.map((i) => getItemStatus(i, logs)), [items, logs]);
@@ -80,7 +86,7 @@ export default function OwnerDashboardPage() {
         </header>
 
         <main className="mx-auto max-w-md px-4 py-4">
-          <OwnerDashboard statuses={statuses} logs={logs} />
+          <OwnerDashboard statuses={statuses} logs={logs} users={users} onUsersChange={refreshUsers} />
         </main>
       </div>
     </ErrorBoundary>
