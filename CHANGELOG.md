@@ -44,9 +44,31 @@ Semua perubahan pada proyek `dc-inv-22-master` dari sesi ini.
 
 - **Checklist Semua** sebelumnya menampilkan toast satu per satu untuk setiap item. Sekarang hanya muncul **satu toast**: "[Jumlah] item ditandai sudah dibeli."
 
+### Added
+
+#### 6. Owner — Kelola Staff
+- Owner sekarang bisa mengelola akun staff dari dashboard.
+- Section baru **"Kelola Staff"** di halaman owner.
+- Fitur:
+  - **Tambah staff**: nama, email, password.
+  - **Edit staff**: ubah nama/email dan password (opsional).
+  - **Hapus staff**: dengan konfirmasi dialog.
+  - **Cari staff** berdasarkan nama atau email.
+- Data staff disimpan di `localStorage` (`dominico-users`).
+- Akun owner tidak dapat dihapus untuk menjaga akses sistem.
+
+### Changed
+
+#### Owner — Kartu Stok Habis
+- Di kartu merah **"Item Habis"**, tulisan **"Sisa X <satuan>"** dihapus karena barang yang habis tidak memiliki sisa stok.
+- Detail "Item Habis" sekarang menampilkan kategori item.
+
 ### Changed Files
 
 - `app/components/dashboard/owner-tab.tsx`
+- `app/components/dashboard/staff-management.tsx` (file baru)
+- `app/dashboard/owner/page.tsx`
 - `app/dashboard/staff/page.tsx`
+- `app/lib/auth.ts`
 - `app/types.ts`
-- `CHANGELOG.md` (file baru)
+- `CHANGELOG.md`
