@@ -651,7 +651,7 @@ function AddItemTask({
   const [unit, setUnit] = useState("pcs");
   const [category, setCategory] = useState("Bahan");
   const [minStock, setMinStock] = useState("");
-  const [frequency, setFrequency] = useState<1 | 7>(1);
+  const [frequency, setFrequency] = useState<number>(1);
   const [barcode, setBarcode] = useState(preFilledBarcode || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -759,21 +759,38 @@ function AddItemTask({
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-muted-foreground">Cek Setiap</label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setFrequency(1)}
-              className={`h-14 sm:h-12 rounded-xl text-base font-semibold border transition-colors ${frequency === 1 ? "bg-foreground text-background" : "bg-background text-foreground opacity-50"}`}
-            >
-              Harian
-            </button>
-            <button
-              type="button"
-              onClick={() => setFrequency(7)}
-              className={`h-14 sm:h-12 rounded-xl text-base font-semibold border transition-colors ${frequency === 7 ? "bg-foreground text-background" : "bg-background text-foreground opacity-50"}`}
-            >
-              Mingguan
-            </button>
+          <div className="relative">
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={365}
+              value={frequency}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (!isNaN(val) && val >= 1) setFrequency(val);
+              }}
+              className="h-14 sm:h-12 text-lg sm:text-base text-center font-semibold pr-14"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+              hari
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3, 7, 14, 30].map((days) => (
+              <button
+                key={days}
+                type="button"
+                onClick={() => setFrequency(days)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                  frequency === days
+                    ? "bg-foreground text-background"
+                    : "bg-background text-foreground opacity-60 hover:opacity-100"
+                }`}
+              >
+                {days} hari
+              </button>
+            ))}
           </div>
         </div>
       </div>
