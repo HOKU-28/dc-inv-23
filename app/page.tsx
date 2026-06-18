@@ -95,7 +95,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-6">
+      <div className="w-full max-w-sm sm:max-w-md space-y-6">
         <div className="text-center space-y-2">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Coffee className="h-6 w-6 text-primary" />

@@ -118,7 +118,7 @@ export function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
 
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-2xl border bg-black aspect-square">
+      <div className="relative overflow-hidden rounded-2xl border bg-black aspect-square max-w-md mx-auto sm:aspect-video sm:max-w-lg">
         <div id={SCANNER_ID} className="w-full h-full" />
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 text-white">

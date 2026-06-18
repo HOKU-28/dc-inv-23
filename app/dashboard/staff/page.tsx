@@ -122,7 +122,7 @@ export default function StaffDashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto max-w-md px-4 py-3 flex items-center justify-between">
+        <div className="mx-auto w-full max-w-md px-4 py-3 sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl flex items-center justify-between">
           {view === "home" ? (
             <div>
               <h1 className="text-lg font-bold leading-tight">Dominico</h1>
@@ -160,7 +160,7 @@ export default function StaffDashboardPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-4 py-6">
+      <main className="mx-auto w-full max-w-md px-4 py-6 sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl">
         {view === "home" && <StaffHome onChangeView={setView} />}
         {view === "scan" && (
           <ScanTask
@@ -221,14 +221,14 @@ function StaffHome({ onChangeView }: { onChangeView: (v: StaffView) => void }) {
         <h2 className="text-2xl font-bold">Pilih tugas</h2>
         <p className="text-sm text-muted-foreground">Ketuk ikon untuk mulai</p>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {HOME_ACTIONS.map((action) => {
           const Icon = action.icon;
           return (
             <button
               key={action.id}
               onClick={() => onChangeView(action.id)}
-              className={`flex flex-col items-center justify-center gap-3 rounded-2xl p-6 text-white shadow-lg active:scale-95 transition-transform min-h-[140px] ${action.color}`}
+              className={`flex flex-col items-center justify-center gap-3 rounded-2xl p-6 text-white shadow-lg active:scale-95 transition-transform min-h-[140px] sm:min-h-[120px] ${action.color}`}
             >
               <Icon className="h-11 w-11" strokeWidth={1.8} />
               <span className="text-base font-bold leading-tight text-center">{action.label}</span>
@@ -261,58 +261,60 @@ function ScanTask({
     <div className="space-y-5">
       <h2 className="text-xl font-bold text-center">Scan Barcode</h2>
 
-      {!scannedBarcode && <BarcodeScanner onScan={onScan} />}
+      <div className="max-w-md mx-auto sm:max-w-lg">
+        {!scannedBarcode && <BarcodeScanner onScan={onScan} />}
 
-      {scannedBarcode && item && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border bg-card p-5 text-center space-y-2">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Item ditemukan</p>
-            <h3 className="text-2xl font-bold">{item.name}</h3>
-            <p className="text-sm text-muted-foreground">
-              {item.category} · {item.unit} · {item.barcode}
-            </p>
+        {scannedBarcode && item && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border bg-card p-5 text-center space-y-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Item ditemukan</p>
+              <h3 className="text-2xl font-bold">{item.name}</h3>
+              <p className="text-sm text-muted-foreground">
+                {item.category} · {item.unit} · {item.barcode}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={onIn}
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-white p-5 active:scale-95 transition-transform min-h-[120px] sm:min-h-[100px]"
+              >
+                <PackagePlus className="h-8 w-8" />
+                <span className="font-bold">Stok Masuk</span>
+              </button>
+              <button
+                onClick={onCheck}
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-blue-500 text-white p-5 active:scale-95 transition-transform min-h-[120px] sm:min-h-[100px]"
+              >
+                <ClipboardCheck className="h-8 w-8" />
+                <span className="font-bold">Cek Stok</span>
+              </button>
+            </div>
+
+            <Button variant="outline" onClick={() => onScan("")} className="w-full h-12">
+              Scan Lagi
+            </Button>
           </div>
+        )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={onIn}
-              className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-white p-5 active:scale-95 transition-transform min-h-[120px]"
-            >
-              <PackagePlus className="h-8 w-8" />
-              <span className="font-bold">Stok Masuk</span>
-            </button>
-            <button
-              onClick={onCheck}
-              className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-blue-500 text-white p-5 active:scale-95 transition-transform min-h-[120px]"
-            >
-              <ClipboardCheck className="h-8 w-8" />
-              <span className="font-bold">Cek Stok</span>
-            </button>
+        {scannedBarcode && !item && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border bg-amber-50 border-amber-200 p-5 text-center space-y-2">
+              <p className="text-sm font-medium text-amber-900">Barcode tidak ditemukan</p>
+              <p className="text-lg font-bold text-amber-900">{scannedBarcode}</p>
+              <p className="text-xs text-amber-800">Tambahkan sebagai item baru?</p>
+            </div>
+
+            <Button onClick={onAdd} className="w-full h-14 sm:h-12 text-lg sm:text-base font-bold">
+              Tambah Item Baru
+            </Button>
+
+            <Button variant="outline" onClick={() => onScan("")} className="w-full h-12">
+              Scan Lagi
+            </Button>
           </div>
-
-          <Button variant="outline" onClick={() => onScan("")} className="w-full h-12">
-            Scan Lagi
-          </Button>
-        </div>
-      )}
-
-      {scannedBarcode && !item && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border bg-amber-50 border-amber-200 p-5 text-center space-y-2">
-            <p className="text-sm font-medium text-amber-900">Barcode tidak ditemukan</p>
-            <p className="text-lg font-bold text-amber-900">{scannedBarcode}</p>
-            <p className="text-xs text-amber-800">Tambahkan sebagai item baru?</p>
-          </div>
-
-          <Button onClick={onAdd} className="w-full h-14 text-lg font-bold">
-            Tambah Item Baru
-          </Button>
-
-          <Button variant="outline" onClick={() => onScan("")} className="w-full h-12">
-            Scan Lagi
-          </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -380,7 +382,7 @@ function CheckTask({
         <h2 className="text-xl font-bold">Cek Stok</h2>
         <Badge variant="secondary" className="text-sm px-3 py-1">{sorted.length} item</Badge>
       </div>
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {sorted.map((status) => (
           <CheckCard key={status.item.id} status={status} onSaved={onSaved} />
         ))}
@@ -493,13 +495,13 @@ function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => voi
         value={qty}
         onChange={(e) => setQty(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-        className="h-14 text-lg text-center font-semibold"
+        className="h-14 sm:h-12 text-lg sm:text-base text-center font-semibold"
       />
 
       <Button
         onClick={handleSave}
         disabled={saving || saved || !qty || Number(qty) < 0}
-        className={`w-full h-14 text-lg font-bold transition-colors ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
+        className={`w-full h-14 sm:h-12 text-lg sm:text-base font-bold transition-colors ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
       >
         {saved ? "Tersimpan ✓" : saving ? "Menyimpan..." : "Simpan"}
       </Button>
@@ -556,13 +558,13 @@ function StockInTask({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-md sm:max-w-2xl mx-auto">
       <h2 className="text-xl font-bold">Stok Masuk</h2>
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-muted-foreground">Item</label>
         <Select value={itemId} onValueChange={(v) => setItemId(v ?? "")}>
-          <SelectTrigger className="h-14 text-base">
+          <SelectTrigger className="h-14 sm:h-12 text-base">
             <SelectValue placeholder="Pilih item" />
           </SelectTrigger>
           <SelectContent>
@@ -575,33 +577,35 @@ function StockInTask({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">Jumlah</label>
-        <Input
-          type="number"
-          inputMode="numeric"
-          min={1}
-          placeholder="0"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          className="h-14 text-lg text-center font-semibold"
-        />
-      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-muted-foreground">Jumlah</label>
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            placeholder="0"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            className="h-14 sm:h-12 text-lg sm:text-base text-center font-semibold"
+          />
+        </div>
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">Tanggal</label>
-        <Input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="h-14 text-base text-center"
-        />
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-muted-foreground">Tanggal</label>
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-14 sm:h-12 text-base text-center"
+          />
+        </div>
       </div>
 
       <Button
         onClick={handleSave}
         disabled={!canSave || saving || saved}
-        className={`w-full h-14 text-lg font-bold ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
+        className={`w-full h-14 sm:h-12 text-lg sm:text-base font-bold ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
       >
         {saved ? "Tersimpan ✓" : saving ? "Menyimpan..." : "Simpan Masuk"}
       </Button>
@@ -672,7 +676,7 @@ function AddItemTask({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-md sm:max-w-2xl mx-auto">
       <h2 className="text-xl font-bold">Tambah Item</h2>
 
       <div className="space-y-2">
@@ -681,15 +685,15 @@ function AddItemTask({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Contoh: Cup Kopi"
-          className="h-14 text-base"
+          className="h-14 sm:h-12 text-base"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-2">
           <label className="text-sm font-medium text-muted-foreground">Satuan</label>
           <Select value={unit} onValueChange={(v) => setUnit(v ?? "pcs")}>
-            <SelectTrigger className="h-14 text-base">
+            <SelectTrigger className="h-14 sm:h-12 text-base">
               <SelectValue placeholder="Pilih" />
             </SelectTrigger>
             <SelectContent>
@@ -704,7 +708,7 @@ function AddItemTask({
         <div className="space-y-2">
           <label className="text-sm font-medium text-muted-foreground">Kategori</label>
           <Select value={category} onValueChange={(v) => setCategory(v ?? "Bahan")}>
-            <SelectTrigger className="h-14 text-base">
+            <SelectTrigger className="h-14 sm:h-12 text-base">
               <SelectValue placeholder="Pilih" />
             </SelectTrigger>
             <SelectContent>
@@ -718,36 +722,38 @@ function AddItemTask({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">Stok Minimal</label>
-        <Input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          value={minStock}
-          onChange={(e) => setMinStock(e.target.value)}
-          placeholder="0"
-          className="h-14 text-lg text-center font-semibold"
-        />
-      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-muted-foreground">Stok Minimal</label>
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={minStock}
+            onChange={(e) => setMinStock(e.target.value)}
+            placeholder="0"
+            className="h-14 sm:h-12 text-lg sm:text-base text-center font-semibold"
+          />
+        </div>
 
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">Cek Setiap</label>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setFrequency(1)}
-            className={`h-14 rounded-xl text-base font-semibold border transition-colors ${frequency === 1 ? "bg-foreground text-background" : "bg-background text-foreground opacity-50"}`}
-          >
-            Harian
-          </button>
-          <button
-            type="button"
-            onClick={() => setFrequency(7)}
-            className={`h-14 rounded-xl text-base font-semibold border transition-colors ${frequency === 7 ? "bg-foreground text-background" : "bg-background text-foreground opacity-50"}`}
-          >
-            Mingguan
-          </button>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-muted-foreground">Cek Setiap</label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setFrequency(1)}
+              className={`h-14 sm:h-12 rounded-xl text-base font-semibold border transition-colors ${frequency === 1 ? "bg-foreground text-background" : "bg-background text-foreground opacity-50"}`}
+            >
+              Harian
+            </button>
+            <button
+              type="button"
+              onClick={() => setFrequency(7)}
+              className={`h-14 sm:h-12 rounded-xl text-base font-semibold border transition-colors ${frequency === 7 ? "bg-foreground text-background" : "bg-background text-foreground opacity-50"}`}
+            >
+              Mingguan
+            </button>
+          </div>
         </div>
       </div>
 
@@ -757,14 +763,14 @@ function AddItemTask({
           value={barcode}
           onChange={(e) => setBarcode(e.target.value)}
           placeholder="Ketik barcode"
-          className="h-14 text-base"
+          className="h-14 sm:h-12 text-base"
         />
       </div>
 
       <Button
         onClick={handleSave}
         disabled={!canSave || saving || saved}
-        className={`w-full h-14 text-lg font-bold ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
+        className={`w-full h-14 sm:h-12 text-lg sm:text-base font-bold ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
       >
         {saved ? "Tersimpan ✓" : saving ? "Menyimpan..." : "Simpan Item"}
       </Button>

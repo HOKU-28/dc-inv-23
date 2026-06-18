@@ -305,7 +305,7 @@ function StaffDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Staff" : "Tambah Staff"}</DialogTitle>
           <DialogDescription>

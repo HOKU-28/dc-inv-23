@@ -89,7 +89,7 @@ export function OwnerDashboard({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-6">
       <div className="text-center space-y-1 py-2">
         <p className="text-sm text-muted-foreground">{formatToday()}</p>
         <h2 className="text-2xl font-bold">Ringkasan Stok</h2>
@@ -99,21 +99,25 @@ export function OwnerDashboard({
         <ZeroStateCard goodCount={goodItems.length} />
       )}
 
-      {habisItems.length > 0 && (
-        <HabisSection items={habisItems} onDrillDown={() => setDrillDown("habis")} />
-      )}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {habisItems.length > 0 && (
+          <HabisSection items={habisItems} onDrillDown={() => setDrillDown("habis")} />
+        )}
 
-      {menipisItems.length > 0 && (
-        <MenipisSection items={menipisItems} onDrillDown={() => setDrillDown("menipis")} />
-      )}
+        {menipisItems.length > 0 && (
+          <MenipisSection items={menipisItems} onDrillDown={() => setDrillDown("menipis")} />
+        )}
+      </div>
 
-      <InsightSection statuses={statuses} logs={logs} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <InsightSection statuses={statuses} logs={logs} />
+        <RekapSection statuses={statuses} logs={logs} />
+      </div>
 
-      <RekapSection statuses={statuses} logs={logs} />
-
-      <StaffSection logs={logs} onDrillDown={() => setDrillDown("staff")} />
-
-      <StaffManagementSection onDrillDown={() => setDrillDown("staffManagement")} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <StaffSection logs={logs} onDrillDown={() => setDrillDown("staff")} />
+        <StaffManagementSection onDrillDown={() => setDrillDown("staffManagement")} />
+      </div>
 
       <AllGoodSection items={goodItems} onDrillDown={() => setDrillDown("allGood")} />
     </div>
@@ -165,7 +169,7 @@ function HabisSection({
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {visible.map((s) => (
           <div
             key={s.item.id}
@@ -213,7 +217,7 @@ function MenipisSection({
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {visible.map((s) => (
           <div
             key={s.item.id}
@@ -559,7 +563,7 @@ function AllGoodSection({
         <span className="font-medium text-sm">{items.length} item aman</span>
       </div>
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {visible.map((s) => (
           <div
             key={s.item.id}
@@ -609,7 +613,7 @@ function HabisDrillDown({
       {items.length === 0 ? (
         <p className="text-center py-12 text-muted-foreground">Tidak ada item habis.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {items.map((s) => (
             <Card
               key={s.item.id}
@@ -642,7 +646,7 @@ function MenipisDrillDown({
       {items.length === 0 ? (
         <p className="text-center py-12 text-muted-foreground">Tidak ada item menipis.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {items.map((s) => (
             <Card
               key={s.item.id}
@@ -669,7 +673,7 @@ function AllGoodDrillDown({ items, onBack }: { items: ItemStatus[]; onBack: () =
       {items.length === 0 ? (
         <p className="text-center py-12 text-muted-foreground">Tidak ada item aman.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {items.map((s) => (
             <Card
               key={s.item.id}
@@ -734,7 +738,7 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
         onChange={(e) => setSearch(e.target.value)}
         className="h-12"
       />
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.slice(0, 30).map((log) => (
           <Card key={log.id} className={log.date === today ? "border-primary" : ""}>
             <CardContent className="p-4 flex items-center justify-between">

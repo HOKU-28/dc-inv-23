@@ -38,7 +38,7 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={isLoading ? undefined : onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

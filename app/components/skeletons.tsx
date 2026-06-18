@@ -74,7 +74,7 @@ export function DashboardSkeleton() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto max-w-md px-4 py-3">
+        <div className="mx-auto w-full max-w-md px-4 py-3 sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Skeleton className="h-5 w-32" />
@@ -84,7 +84,7 @@ export function DashboardSkeleton() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-md px-4 py-4 space-y-4">
+      <main className="mx-auto w-full max-w-md px-4 py-4 sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl space-y-4">
         <Skeleton className="h-10 w-full" />
         <SkeletonCard rows={3} />
         <SkeletonCard rows={2} />

@@ -57,7 +57,7 @@ export default function OwnerDashboardPage() {
     <ErrorBoundary>
       <div className="min-h-screen bg-background pb-8">
         <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-          <div className="mx-auto max-w-md px-4 py-3 flex items-center justify-between">
+          <div className="mx-auto w-full max-w-md px-4 py-3 sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl flex items-center justify-between">
             <div>
               <h1 className="text-lg font-bold leading-tight">Dominico Stock</h1>
               <p className="text-xs text-muted-foreground">Ringkasan Owner</p>
@@ -85,7 +85,7 @@ export default function OwnerDashboardPage() {
           </div>
         </header>
 
-        <main className="mx-auto max-w-md px-4 py-4">
+        <main className="mx-auto w-full max-w-md px-4 py-4 sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl">
           <OwnerDashboard statuses={statuses} logs={logs} users={users} onUsersChange={refreshUsers} />
         </main>
       </div>
