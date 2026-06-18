@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Pagination } from "@/app/components/pagination";
+import { usePagination } from "@/app/hooks/use-pagination";
 import {
   BarChart,
   Bar,
@@ -718,6 +720,20 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
     return name.includes(search.toLowerCase()) || (l.recordedBy || "").toLowerCase().includes(search.toLowerCase());
   });
 
+  const {
+    currentPage,
+    setCurrentPage,
+    totalItems,
+    totalPages,
+    paginatedData,
+    startIndex,
+    endIndex,
+  } = usePagination(filtered, { pageSize: 10 });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, setCurrentPage]);
+
   const handleDelete = (id: string) => {
     if (!confirm("Hapus catatan ini?")) return;
     setDeletingId(id);
@@ -741,7 +757,7 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
         className="h-12"
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.slice(0, 30).map((log) => (
+        {paginatedData.map((log) => (
           <Card key={log.id} className={log.date === today ? "border-primary" : ""}>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
@@ -766,6 +782,15 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
           </Card>
         ))}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        startIndex={startIndex}
+        endIndex={endIndex}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }
