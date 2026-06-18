@@ -698,8 +698,26 @@ function AllGoodDrillDown({ items, onBack }: { items: ItemStatus[]; onBack: () =
   );
 }
 
+type DateFilter = "all" | "today" | "7days" | "30days";
+
+const DATE_FILTER_LABELS: Record<DateFilter, string> = {
+  all: "Semua",
+  today: "Hari Ini",
+  "7days": "7 Hari",
+  "30days": "30 Hari",
+};
+
+function isWithinDays(dateStr: string, days: number, reference: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  const ref = new Date(reference + "T00:00:00");
+  const diffTime = ref.getTime() - d.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= days;
+}
+
 function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void }) {
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const today = todayStr();
 
@@ -715,9 +733,29 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
   );
 
   const filtered = recentActivities.filter((l) => {
-    if (!search.trim()) return true;
-    const name = (itemMap.get(l.itemId) || "").toLowerCase();
-    return name.includes(search.toLowerCase()) || (l.recordedBy || "").toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = !search.trim()
+      ? true
+      : (() => {
+          const name = (itemMap.get(l.itemId) || "").toLowerCase();
+          return (
+            name.includes(search.toLowerCase()) ||
+            (l.recordedBy || "").toLowerCase().includes(search.toLowerCase())
+          );
+        })();
+
+    if (!matchesSearch) return false;
+
+    switch (dateFilter) {
+      case "today":
+        return l.date === today;
+      case "7days":
+        return isWithinDays(l.date, 7, today);
+      case "30days":
+        return isWithinDays(l.date, 30, today);
+      case "all":
+      default:
+        return true;
+    }
   });
 
   const {
@@ -732,7 +770,7 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, setCurrentPage]);
+  }, [search, dateFilter, setCurrentPage]);
 
   const handleDelete = (id: string) => {
     if (!confirm("Hapus catatan ini?")) return;
@@ -756,7 +794,21 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
         onChange={(e) => setSearch(e.target.value)}
         className="h-12"
       />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(DATE_FILTER_LABELS) as DateFilter[]).map((key) => (
+          <Button
+            key={key}
+            variant={dateFilter === key ? "default" : "outline"}
+            size="sm"
+            onClick={() => setDateFilter(key)}
+          >
+            {DATE_FILTER_LABELS[key]}
+          </Button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {paginatedData.map((log) => (
           <Card key={log.id} className={log.date === today ? "border-primary" : ""}>
             <CardContent className="p-4 flex items-center justify-between">
