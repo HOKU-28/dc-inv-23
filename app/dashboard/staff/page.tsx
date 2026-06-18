@@ -777,20 +777,32 @@ function AddItemTask({
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 7, 14, 30].map((days) => (
-              <button
-                key={days}
-                type="button"
-                onClick={() => setFrequency(days)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
-                  frequency === days
-                    ? "bg-foreground text-background"
-                    : "bg-background text-foreground opacity-60 hover:opacity-100"
-                }`}
-              >
-                {days} hari
-              </button>
-            ))}
+            {[1, 3, 5, 7, 14, 30].map((days) => {
+              const label =
+                days === 1
+                  ? "Harian"
+                  : days === 7
+                  ? "Mingguan"
+                  : days === 14
+                  ? "2 Mingguan"
+                  : days === 30
+                  ? "Bulanan"
+                  : `${days} hari`;
+              return (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setFrequency(days)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                    frequency === days
+                      ? "bg-foreground text-background"
+                      : "bg-background text-foreground opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
