@@ -88,6 +88,8 @@ export function OwnerDashboard({
     );
   }
 
+  const alertCount = (habisItems.length > 0 ? 1 : 0) + (menipisItems.length > 0 ? 1 : 0);
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="text-center space-y-1 py-2">
@@ -99,7 +101,7 @@ export function OwnerDashboard({
         <ZeroStateCard goodCount={goodItems.length} />
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={`grid gap-4 ${alertCount === 1 ? "grid-cols-1" : "sm:grid-cols-2"}`}>
         {habisItems.length > 0 && (
           <HabisSection items={habisItems} onDrillDown={() => setDrillDown("habis")} />
         )}
