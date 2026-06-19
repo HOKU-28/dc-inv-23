@@ -42,6 +42,9 @@ import {
   todayStr,
 } from "@/app/lib/data";
 import { getSession, logout, requireAuth } from "@/app/lib/auth";
+import { syncAll } from "@/app/lib/sync";
+import { isOnline } from "@/app/lib/supabase";
+import { useOnlineStatus } from "@/app/hooks/use-online-status";
 import { DashboardSkeleton } from "@/app/components/skeletons";
 import { useTheme } from "@/app/components/theme-provider";
 import { BarcodeScanner } from "@/app/components/barcode-scanner";
@@ -74,7 +77,9 @@ function findItemByBarcode(barcode: string): Item | undefined {
 export default function StaffDashboardPage() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
+  const online = useOnlineStatus();
   const [mounted, setMounted] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [view, setView] = useState<StaffView>("home");
   const [items, setItems] = useState<Item[]>([]);
   const [statuses, setStatuses] = useState<ItemStatus[]>([]);
@@ -94,9 +99,24 @@ export default function StaffDashboardPage() {
       router.replace("/");
       return;
     }
-    setMounted(true);
-    refresh();
+
+    const init = async () => {
+      if (isOnline()) {
+        await syncAll().catch((err) => console.error("[staff] initial sync failed:", err));
+      }
+      refresh();
+      setMounted(true);
+      setInitialLoading(false);
+    };
+
+    init();
   }, [router]);
+
+  useEffect(() => {
+    if (mounted && online) {
+      syncAll().then(() => refresh()).catch((err) => console.error("[staff] syncAll failed:", err));
+    }
+  }, [online, mounted]);
 
   const handleLogout = () => {
     logout();
@@ -124,7 +144,7 @@ export default function StaffDashboardPage() {
     }
   };
 
-  if (!mounted) return <DashboardSkeleton />;
+  if (!mounted || initialLoading) return <DashboardSkeleton />;
 
   return (
     <div className="min-h-screen bg-background">

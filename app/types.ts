@@ -30,6 +30,7 @@ export interface Item {
   isActive: boolean;
   barcode?: string;
   location?: string;
+  updatedAt?: number;
 }
 
 export interface MonthlyUsage {

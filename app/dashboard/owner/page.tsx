@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Sun, Moon } from "lucide-react";
 import { Item, StockLog } from "@/app/types";
 import { getItems, getItemStatus, getLogs } from "@/app/lib/data";
+import { syncAll } from "@/app/lib/sync";
+import { isOnline } from "@/app/lib/supabase";
+import { useOnlineStatus } from "@/app/hooks/use-online-status";
 import { OwnerDashboard } from "@/app/components/dashboard/owner-tab";
 import { logout, requireAuth, getUsers, User } from "@/app/lib/auth";
 import { DashboardSkeleton } from "@/app/components/skeletons";
@@ -16,10 +19,12 @@ import { toast } from "sonner";
 export default function OwnerDashboardPage() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
+  const online = useOnlineStatus();
   const [items, setItems] = useState<Item[]>([]);
   const [logs, setLogs] = useState<StockLog[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const refresh = () => {
     setItems(getItems());
@@ -36,10 +41,25 @@ export default function OwnerDashboardPage() {
       router.replace("/");
       return;
     }
-    setMounted(true);
-    refresh();
-    refreshUsers();
+
+    const init = async () => {
+      if (isOnline()) {
+        await syncAll().catch((err) => console.error("[owner] initial sync failed:", err));
+      }
+      refresh();
+      refreshUsers();
+      setMounted(true);
+      setInitialLoading(false);
+    };
+
+    init();
   }, [router]);
+
+  useEffect(() => {
+    if (mounted && online) {
+      syncAll().then(() => refresh()).catch((err) => console.error("[owner] syncAll failed:", err));
+    }
+  }, [online, mounted]);
 
   const statuses = useMemo(() => items.map((i) => getItemStatus(i, logs)), [items, logs]);
 
@@ -49,7 +69,7 @@ export default function OwnerDashboardPage() {
     router.replace("/");
   };
 
-  if (!mounted) {
+  if (!mounted || initialLoading) {
     return <DashboardSkeleton />;
   }
 

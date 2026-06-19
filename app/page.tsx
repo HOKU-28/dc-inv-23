@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Coffee, Eye, EyeOff, Loader2, UserCog, Users } from "lucide-react";
 import { login, getSession } from "@/app/lib/auth";
+import { syncAll } from "@/app/lib/sync";
+import { useOnlineStatus } from "@/app/hooks/use-online-status";
 import { toast } from "sonner";
 import { DashboardSkeleton } from "@/app/components/skeletons";
 
@@ -28,6 +30,7 @@ function validatePassword(password: string): string | undefined {
 
 export default function LoginPage() {
   const router = useRouter();
+  const online = useOnlineStatus();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,6 +46,12 @@ export default function LoginPage() {
       setChecking(false);
     }
   }, [router]);
+
+  useEffect(() => {
+    if (online) {
+      syncAll().catch((err) => console.error("[login] syncAll failed:", err));
+    }
+  }, [online]);
 
   const validateField = (name: keyof FormErrors, value: string) => {
     setErrors((prev) => ({

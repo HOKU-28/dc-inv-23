@@ -1,5 +1,6 @@
 import { Item, StockLog, Sale, MonthlyUsage, ItemStatus, ReorderSuggestion, DailyQueue } from "@/app/types";
 import { removeFromShoppingById } from "@/app/lib/shopping-list";
+import { syncItems, syncLogs, syncSales } from "@/app/lib/sync";
 
 const ITEMS_KEY = "dominico-items";
 const LOGS_KEY = "dominico-logs";
@@ -63,12 +64,17 @@ export function getItems(): Item[] {
     return defaultItems;
   }
   const parsed: Item[] = JSON.parse(raw);
-  // Migration: legacy items without isActive default to active
+  // Migration: legacy items without isActive default to active;
+  // legacy items without updatedAt default to 0 for safe cloud conflict resolution.
   const migrated = parsed.map((item) => ({
     ...item,
     isActive: item.isActive ?? true,
+    updatedAt: item.updatedAt ?? 0,
   }));
-  if (migrated.some((item, i) => item.isActive !== parsed[i].isActive)) {
+  const needsSave = migrated.some(
+    (item, i) => item.isActive !== parsed[i].isActive || item.updatedAt !== parsed[i].updatedAt
+  );
+  if (needsSave) {
     saveItems(migrated);
   }
   return migrated;
@@ -202,6 +208,7 @@ export function addLog(log: Omit<StockLog, "id" | "createdAt">): StockLog {
   const logs = getLogs();
   logs.push(newLog);
   saveLogs(logs);
+  syncLogs().catch((err) => console.error("[data] syncLogs failed:", err));
   if (log.type === "in") {
     const item = getItems().find((i) => i.id === log.itemId);
     if (item) {
@@ -217,13 +224,16 @@ export function addLog(log: Omit<StockLog, "id" | "createdAt">): StockLog {
 export function deleteLog(id: string) {
   const logs = getLogs().filter((l) => l.id !== id);
   saveLogs(logs);
+  syncLogs().catch((err) => console.error("[data] syncLogs failed:", err));
 }
 
-export function addItem(item: Omit<Item, "id" | "isActive"> & { isActive?: boolean }): Item {
-  const newItem: Item = { ...item, id: generateId(), isActive: item.isActive ?? true };
+export function addItem(item: Omit<Item, "id" | "isActive" | "updatedAt"> & { isActive?: boolean }): Item {
+  const now = Date.now();
+  const newItem: Item = { ...item, id: generateId(), isActive: item.isActive ?? true, updatedAt: now };
   const items = getItems();
   items.push(newItem);
   saveItems(items);
+  syncItems().catch((err) => console.error("[data] syncItems failed:", err));
   return newItem;
 }
 
@@ -231,8 +241,9 @@ export function archiveItem(id: string): Item | undefined {
   const items = getItems();
   const index = items.findIndex((i) => i.id === id);
   if (index === -1) return undefined;
-  items[index] = { ...items[index], isActive: false };
+  items[index] = { ...items[index], isActive: false, updatedAt: Date.now() };
   saveItems(items);
+  syncItems().catch((err) => console.error("[data] syncItems failed:", err));
   return items[index];
 }
 
@@ -240,8 +251,9 @@ export function restoreItem(id: string): Item | undefined {
   const items = getItems();
   const index = items.findIndex((i) => i.id === id);
   if (index === -1) return undefined;
-  items[index] = { ...items[index], isActive: true };
+  items[index] = { ...items[index], isActive: true, updatedAt: Date.now() };
   saveItems(items);
+  syncItems().catch((err) => console.error("[data] syncItems failed:", err));
   return items[index];
 }
 
@@ -275,12 +287,14 @@ export function addSale(sale: Omit<Sale, "id" | "createdAt">): Sale {
   const sales = getSales();
   sales.push(newSale);
   saveSales(sales);
+  syncSales().catch((err) => console.error("[data] syncSales failed:", err));
   return newSale;
 }
 
 export function deleteSale(id: string) {
   const sales = getSales().filter((s) => s.id !== id);
   saveSales(sales);
+  syncSales().catch((err) => console.error("[data] syncSales failed:", err));
 }
 
 // ---------- Queries ----------
