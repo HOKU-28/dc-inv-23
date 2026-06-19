@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,11 @@ import {
   FileSpreadsheet,
   FileDown,
   UserCog,
+  MapPin,
+  QrCode,
+  Database,
+  Upload,
+  Download,
 } from "lucide-react";
 import { ItemStatus, StockLog } from "@/app/types";
 import {
@@ -40,6 +46,7 @@ import {
   getYearlyUsage,
   todayStr,
 } from "@/app/lib/data";
+import { downloadBackup, readBackupFile, restoreBackup } from "@/app/lib/backup";
 import { User } from "@/app/lib/auth";
 import { toast } from "sonner";
 import { StaffManagement } from "./staff-management";
@@ -55,7 +62,7 @@ export function OwnerDashboard({
   users: User[];
   onUsersChange: () => void;
 }) {
-  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | "allGood" | "staffManagement" | null>(null);
+  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | "allGood" | "staffManagement" | "backup" | null>(null);
 
   const habisItems = statuses.filter((s) => s.currentStock <= 0 || s.isOverdue);
   const menipisItems = statuses.filter(
@@ -86,6 +93,14 @@ export function OwnerDashboard({
       <div className="space-y-4">
         <DrillDownHeader title="Kelola Staff" onBack={() => setDrillDown(null)} />
         <StaffManagement users={users} onUsersChange={onUsersChange} />
+      </div>
+    );
+  }
+  if (drillDown === "backup") {
+    return (
+      <div className="space-y-4">
+        <DrillDownHeader title="Backup & Restore" onBack={() => setDrillDown(null)} />
+        <BackupDrillDown />
       </div>
     );
   }
@@ -121,6 +136,8 @@ export function OwnerDashboard({
       <div className="grid gap-4 sm:grid-cols-2">
         <StaffSection logs={logs} onDrillDown={() => setDrillDown("staff")} />
         <StaffManagementSection onDrillDown={() => setDrillDown("staffManagement")} />
+        <LabelsSection />
+        <BackupSection onDrillDown={() => setDrillDown("backup")} />
       </div>
 
       <AllGoodSection items={goodItems} onDrillDown={() => setDrillDown("allGood")} />
@@ -551,6 +568,116 @@ function StaffManagementSection({ onDrillDown }: { onDrillDown: () => void }) {
   );
 }
 
+function LabelsSection() {
+  const router = useRouter();
+  return (
+    <div
+      onClick={() => router.push("/dashboard/owner/labels")}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && router.push("/dashboard/owner/labels")}
+      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <QrCode className="h-5 w-5" />
+          <p className="text-sm font-medium">Cetak Label QR</p>
+        </div>
+        <span className="text-xs font-semibold opacity-80">Buka →</span>
+      </div>
+    </div>
+  );
+}
+
+function BackupSection({ onDrillDown }: { onDrillDown: () => void }) {
+  return (
+    <div
+      onClick={onDrillDown}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onDrillDown()}
+      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Database className="h-5 w-5" />
+          <p className="text-sm font-medium">Backup & Restore</p>
+        </div>
+        <span className="text-xs font-semibold opacity-80">Buka →</span>
+      </div>
+    </div>
+  );
+}
+
+function BackupDrillDown() {
+  const [file, setFile] = useState<File | null>(null);
+  const [restoring, setRestoring] = useState(false);
+
+  const handleDownload = () => {
+    downloadBackup();
+    toast.success("File backup sedang diunduh.");
+  };
+
+  const handleRestore = async () => {
+    if (!file) return;
+    if (!confirm("Restore akan menimpa data saat ini. Lanjutkan?")) return;
+    setRestoring(true);
+    try {
+      const backup = await readBackupFile(file);
+      restoreBackup(backup);
+      toast.success("Backup berhasil direstore. Halaman akan dimuat ulang.");
+      setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal restore backup.");
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border bg-card p-5 space-y-4">
+        <div>
+          <h3 className="font-bold flex items-center gap-2">
+            <Download className="h-4 w-4" />
+            Download Backup
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">Simpan semua data sebagai file JSON.</p>
+        </div>
+        <Button onClick={handleDownload} className="w-full h-12">
+          <Download className="h-4 w-4 mr-2" />
+          Unduh Backup
+        </Button>
+      </div>
+
+      <div className="rounded-2xl border bg-card p-5 space-y-4">
+        <div>
+          <h3 className="font-bold flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Restore Backup
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">Pilih file JSON backup sebelumnya.</p>
+        </div>
+        <Input
+          type="file"
+          accept="application/json,.json"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+          className="h-12"
+        />
+        <Button
+          onClick={handleRestore}
+          disabled={!file || restoring}
+          variant="outline"
+          className="w-full h-12"
+        >
+          <Upload className="h-4 w-4 mr-2" />
+          {restoring ? "Merestore..." : "Restore Backup"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function AllGoodSection({
   items,
   onDrillDown,
@@ -627,6 +754,12 @@ function HabisDrillDown({
                 <div>
                   <h3 className="font-bold">{s.item.name}</h3>
                   <p className="text-xs opacity-80">{s.item.category}</p>
+                  {s.item.location && (
+                    <p className="text-xs opacity-80 flex items-center gap-1 mt-1">
+                      <MapPin className="h-3 w-3" />
+                      {s.item.location}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -660,6 +793,12 @@ function MenipisDrillDown({
                 <div>
                   <h3 className="font-bold">{s.item.name}</h3>
                   <p className="text-xs opacity-80">Sisa {s.currentStock} {s.item.unit}</p>
+                  {s.item.location && (
+                    <p className="text-xs opacity-80 flex items-center gap-1 mt-1">
+                      <MapPin className="h-3 w-3" />
+                      {s.item.location}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -684,11 +823,17 @@ function AllGoodDrillDown({ items, onBack }: { items: ItemStatus[]; onBack: () =
               className="border-green-200 bg-green-50 text-green-950 dark:bg-green-950 dark:border-green-900 dark:text-green-100"
             >
               <CardContent className="p-4 flex items-center justify-between">
-                <div>
+                <div className="min-w-0">
                   <h3 className="font-bold">{s.item.name}</h3>
                   <p className="text-xs opacity-80">{s.item.category}</p>
+                  {s.item.location && (
+                    <p className="text-xs opacity-80 flex items-center gap-1 mt-1">
+                      <MapPin className="h-3 w-3" />
+                      {s.item.location}
+                    </p>
+                  )}
                 </div>
-                <span className="text-sm font-semibold">{s.currentStock} {s.item.unit}</span>
+                <span className="text-sm font-semibold shrink-0">{s.currentStock} {s.item.unit}</span>
               </CardContent>
             </Card>
           ))}

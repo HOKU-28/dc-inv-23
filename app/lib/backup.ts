@@ -2,8 +2,11 @@ export const BACKUP_KEYS = [
   "dominico-items",
   "dominico-logs",
   "dominico-sales",
+  "dominico-users",
   "dominico-session",
   "dominico-theme",
+  "dominico-shopping-ids",
+  "dominico-daily-queue",
 ];
 
 export interface BackupData {

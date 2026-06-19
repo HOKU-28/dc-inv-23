@@ -1,9 +1,10 @@
-import { Item, StockLog, Sale, MonthlyUsage, ItemStatus, ReorderSuggestion } from "@/app/types";
+import { Item, StockLog, Sale, MonthlyUsage, ItemStatus, ReorderSuggestion, DailyQueue } from "@/app/types";
 import { removeFromShoppingById } from "@/app/lib/shopping-list";
 
 const ITEMS_KEY = "dominico-items";
 const LOGS_KEY = "dominico-logs";
 const SALES_KEY = "dominico-sales";
+const DAILY_QUEUE_KEY = "dominico-daily-queue";
 
 export const defaultItems: Item[] = [
   // Harian: cepat habis & sering dipakai
@@ -330,6 +331,87 @@ export function getDueItems(items?: Item[], logs?: StockLog[]): ItemStatus[] {
     .map((item) => getItemStatus(item, allLogs))
     .filter((s) => s.nextCheckDate && s.nextCheckDate <= today && s.lastCheckDate !== today)
     .sort((a, b) => (a.nextCheckDate ?? "").localeCompare(b.nextCheckDate ?? ""));
+}
+
+// ---------- Daily rotation queue ----------
+
+export function generateDailyQueue(statuses?: ItemStatus[], targetSize = 10): DailyQueue {
+  const today = todayStr();
+  const allStatuses = statuses ?? getActiveItems().map((item) => getItemStatus(item));
+
+  // Item habis/menipis selalu masuk tugas (exception boleh lebih dari 10).
+  const lowOut = allStatuses
+    .filter((s) => s.currentStock <= 0 || s.isLow)
+    .sort((a, b) => {
+      const pa = a.currentStock <= 0 ? 0 : 1;
+      const pb = b.currentStock <= 0 ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return a.item.name.localeCompare(b.item.name);
+    });
+
+  // Item lain yang butuh dicek hari ini: lewat jatuh tempo atau due hari ini,
+  // tapi hanya kalau belum dicek hari ini.
+  const others = allStatuses
+    .filter((s) => !(s.currentStock <= 0 || s.isLow) && s.lastCheckDate !== today && (s.isOverdue || s.nextCheckDate === today))
+    .sort((a, b) => {
+      const pa = a.isOverdue ? 0 : 1;
+      const pb = b.isOverdue ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return (a.nextCheckDate ?? "").localeCompare(b.nextCheckDate ?? "") || a.item.name.localeCompare(b.item.name);
+    });
+
+  const remainingSlots = Math.max(0, targetSize - lowOut.length);
+  const queue = [...lowOut.map((s) => s.item.id), ...others.slice(0, remainingSlots).map((s) => s.item.id)];
+  const backlog = others.slice(remainingSlots).map((s) => s.item.id);
+
+  return { date: today, queue, backlog };
+}
+
+export function refillDailyQueue(date: string = todayStr()): DailyQueue {
+  if (typeof window === "undefined") return { date, queue: [], backlog: [] };
+  const current = getDailyQueue(date);
+  const items = getActiveItems();
+  const itemMap = new Map(items.map((item) => [item.id, item]));
+  const logs = getLogs();
+
+  const isDone = (id: string) => {
+    const item = itemMap.get(id);
+    if (!item) return true;
+    return getItemStatus(item, logs).lastCheckDate === date;
+  };
+
+  const queue = current.queue.filter((id) => !isDone(id));
+  let backlog = current.backlog.filter((id) => !isDone(id));
+
+  while (queue.length < 10 && backlog.length > 0) {
+    queue.push(backlog.shift()!);
+  }
+
+  const updated = { date, queue, backlog };
+  saveDailyQueue(updated);
+  return updated;
+}
+
+export function getDailyQueue(date: string = todayStr()): DailyQueue {
+  if (typeof window === "undefined") return { date, queue: [], backlog: [] };
+  const raw = localStorage.getItem(DAILY_QUEUE_KEY);
+  if (raw) {
+    const parsed: DailyQueue = JSON.parse(raw);
+    if (parsed.date === date) return parsed;
+  }
+  const generated = generateDailyQueue(undefined, 10);
+  localStorage.setItem(DAILY_QUEUE_KEY, JSON.stringify(generated));
+  return generated;
+}
+
+export function saveDailyQueue(queue: DailyQueue) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(DAILY_QUEUE_KEY, JSON.stringify(queue));
+}
+
+export function resetDailyQueue() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(DAILY_QUEUE_KEY);
 }
 
 // ---------- Period usage ----------

@@ -24,6 +24,8 @@ import {
   Moon,
   Trash2,
   Loader2,
+  MapPin,
+  Search,
 } from "lucide-react";
 import { Item, ItemStatus } from "@/app/types";
 import {
@@ -31,9 +33,12 @@ import {
   addLog,
   archiveItem,
   getActiveItems,
+  getDailyQueue,
   getItemStatus,
   getItems,
   getLogs,
+  refillDailyQueue,
+  saveDailyQueue,
   todayStr,
 } from "@/app/lib/data";
 import { getSession, logout, requireAuth } from "@/app/lib/auth";
@@ -180,7 +185,6 @@ export default function StaffDashboardPage() {
             preSelectedItemId={scannedItemId ?? undefined}
             onSaved={() => {
               refresh();
-              goHome();
             }}
             onBack={goHome}
           />
@@ -191,7 +195,6 @@ export default function StaffDashboardPage() {
             preSelectedItemId={scannedItemId ?? undefined}
             onSaved={() => {
               refresh();
-              goHome();
             }}
             onBack={goHome}
           />
@@ -199,9 +202,14 @@ export default function StaffDashboardPage() {
         {view === "add" && (
           <AddItemTask
             preFilledBarcode={scannedBarcode ?? undefined}
-            onSaved={() => {
+            onSaved={(newItemId) => {
               refresh();
-              goHome();
+              if (scannedBarcode && newItemId) {
+                setScannedItemId(newItemId);
+                setView("check");
+              } else {
+                goHome();
+              }
             }}
             onBack={goHome}
           />
@@ -333,37 +341,76 @@ function CheckTask({
   onBack: () => void;
 }) {
   const today = todayStr();
-  const sorted = useMemo(() => {
-    const tomorrow = addDays(today, 1);
-    let list = [...statuses]
-      .filter(
-        (s) =>
-          (s.nextCheckDate && s.nextCheckDate <= tomorrow) ||
-          s.currentStock <= 0 ||
-          s.isLow
-      )
-      .sort((a, b) => {
-        const priority = (s: ItemStatus) => {
-          if (s.currentStock <= 0) return 0; // habis
-          if (s.isLow) return 1; // menipis
-          if (s.isOverdue) return 2;
-          if (s.nextCheckDate === today) return 3;
-          if (s.nextCheckDate === tomorrow) return 4;
-          return 5;
-        };
-        const diff = priority(a) - priority(b);
-        if (diff !== 0) return diff;
-        return a.item.name.localeCompare(b.item.name);
-      });
+  const [queueData, setQueueData] = useState(() => getDailyQueue());
+  const [showBacklog, setShowBacklog] = useState(false);
+  const [query, setQuery] = useState("");
 
-    if (preSelectedItemId) {
-      const selected = list.find((s) => s.item.id === preSelectedItemId);
-      if (selected) {
-        list = [selected, ...list.filter((s) => s.item.id !== preSelectedItemId)];
+  const statusMap = useMemo(() => {
+    const map = new Map<string, ItemStatus>();
+    statuses.forEach((s) => map.set(s.item.id, s));
+    return map;
+  }, [statuses]);
+
+  useEffect(() => {
+    const current = getDailyQueue();
+    if (current.date !== today) {
+      const generated = getDailyQueue(today);
+      const refilled = refillDailyQueue(today);
+      setQueueData(refilled);
+      return;
+    }
+    const refilled = refillDailyQueue(today);
+    if (preSelectedItemId && !refilled.queue.includes(preSelectedItemId) && !refilled.backlog.includes(preSelectedItemId)) {
+      const selected = statusMap.get(preSelectedItemId);
+      if (selected && needsCheck(selected)) {
+        const updated = { ...refilled, queue: [preSelectedItemId, ...refilled.queue] };
+        saveDailyQueue(updated);
+        setQueueData(updated);
+        return;
       }
     }
-    return list;
-  }, [statuses, today, preSelectedItemId]);
+    setQueueData(refilled);
+  }, [preSelectedItemId, statusMap, today]);
+
+  const matchesQuery = (item: Item) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return !!(
+      item.name.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q) ||
+      (item.barcode && item.barcode.toLowerCase().includes(q)) ||
+      (item.location && item.location.toLowerCase().includes(q))
+    );
+  };
+
+  const needsCheck = (s: ItemStatus): boolean => {
+    if (s.lastCheckDate === today) return false;
+    return !!(s.currentStock <= 0 || s.isLow || s.isOverdue || (s.nextCheckDate && s.nextCheckDate <= today));
+  };
+
+  const rawQueueRemaining = useMemo(() => {
+    return queueData.queue
+      .map((id) => statusMap.get(id))
+      .filter((s): s is ItemStatus => !!s && needsCheck(s));
+  }, [queueData, statusMap, today]);
+
+  const queueStatuses = useMemo(() => {
+    return queueData.queue
+      .map((id) => statusMap.get(id))
+      .filter((s): s is ItemStatus => !!s && needsCheck(s) && matchesQuery(s.item));
+  }, [queueData, statusMap, today, query]);
+
+  const backlogStatuses = useMemo(() => {
+    return queueData.backlog
+      .map((id) => statusMap.get(id))
+      .filter((s): s is ItemStatus => !!s && needsCheck(s) && matchesQuery(s.item));
+  }, [queueData, statusMap, today, query]);
+
+  const otherStatuses = useMemo(() => {
+    if (!query.trim()) return [];
+    const queuedIds = new Set([...queueData.queue, ...queueData.backlog]);
+    return statuses.filter((s) => matchesQuery(s.item) && !queuedIds.has(s.item.id));
+  }, [statuses, query, queueData]);
 
   const {
     currentPage,
@@ -373,41 +420,103 @@ function CheckTask({
     paginatedData,
     startIndex,
     endIndex,
-  } = usePagination(sorted, { pageSize: 6 });
+  } = usePagination(queueStatuses, { pageSize: 6 });
 
-  if (sorted.length === 0) {
-    return (
-      <div className="text-center space-y-4 py-12">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300">
-          <CheckCircle2 className="h-10 w-10" />
-        </div>
-        <h2 className="text-xl font-bold">Semua sudah dicek</h2>
-        <p className="text-sm text-muted-foreground">Tidak ada item yang perlu dicek hari ini.</p>
-        <Button onClick={onBack} className="min-h-[48px] px-8">Kembali</Button>
-      </div>
-    );
-  }
+  const handleSaved = () => {
+    onSaved();
+    const refilled = refillDailyQueue(today);
+    setQueueData(refilled);
+  };
+
+  const allEmpty = queueStatuses.length === 0 && backlogStatuses.length === 0 && otherStatuses.length === 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Cek Stok</h2>
-        <Badge variant="secondary" className="text-sm px-3 py-1">{sorted.length} item</Badge>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {paginatedData.map((status) => (
-          <CheckCard key={status.item.id} status={status} onSaved={onSaved} />
-        ))}
+        <Badge variant="secondary" className="text-sm px-3 py-1">{rawQueueRemaining.length}/10 tugas</Badge>
       </div>
 
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        startIndex={startIndex}
-        endIndex={endIndex}
-        onPageChange={setCurrentPage}
-      />
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setCurrentPage(1);
+          }}
+          placeholder="Cari item, kategori, barcode..."
+          className="pl-9 h-12"
+        />
+      </div>
+
+      {rawQueueRemaining.length === 0 && !query.trim() && (
+        <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-center text-green-900 dark:bg-green-950 dark:border-green-900 dark:text-green-100">
+          <p className="font-bold">Tugas harian selesai ✓</p>
+          <p className="text-sm opacity-80">Semua item utama sudah dicek. Kerjakan backlog atau cari item lain jika perlu.</p>
+        </div>
+      )}
+
+      {queueStatuses.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {paginatedData.map((status) => (
+              <CheckCard key={status.item.id} status={status} onSaved={handleSaved} />
+            ))}
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            startIndex={startIndex}
+            endIndex={endIndex}
+            onPageChange={setCurrentPage}
+          />
+        </>
+      )}
+
+      {backlogStatuses.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <button
+            onClick={() => setShowBacklog((v) => !v)}
+            className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-100 flex items-center justify-between"
+          >
+            <span className="font-bold text-sm">{backlogStatuses.length} item lain perlu dicek (backlog)</span>
+            <span className="text-sm font-semibold">{showBacklog ? "Sembunyikan ↑" : "Kerjakan →"}</span>
+          </button>
+
+          {showBacklog && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {backlogStatuses.map((status) => (
+                <CheckCard key={status.item.id} status={status} onSaved={handleSaved} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {otherStatuses.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-blue-900 dark:bg-blue-950 dark:border-blue-900 dark:text-blue-100">
+            <p className="font-bold text-sm">{otherStatuses.length} item lain dari pencarian</p>
+            <p className="text-xs opacity-80">Item yang cocok dengan pencarian, termasuk yang sudah dicek hari ini.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {otherStatuses.map((status) => (
+              <CheckCard key={status.item.id} status={status} onSaved={handleSaved} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {allEmpty && query.trim() && (
+        <div className="text-center space-y-3 py-10">
+          <h3 className="text-lg font-bold">Tidak ada hasil pencarian</h3>
+          <p className="text-sm text-muted-foreground">Item yang dicari tidak ditemukan.</p>
+          <Button onClick={() => setQuery("")} className="min-h-[48px] px-8">Bersihkan Pencarian</Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -475,9 +584,15 @@ function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => voi
   return (
     <div className={`rounded-2xl border bg-card p-4 space-y-3 transition-colors ${isOutOfStock ? "border-red-300 bg-red-50/30 dark:bg-red-950/20" : isLowStock ? "border-orange-300 bg-orange-50/30 dark:bg-orange-950/20" : ""}`}>
       <div className="flex items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <h3 className="text-lg font-bold leading-tight">{status.item.name}</h3>
           <p className="text-xs text-muted-foreground">{status.item.category}</p>
+          {status.item.location && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+              <MapPin className="h-3 w-3" />
+              {status.item.location}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[55%]">
           {isOutOfStock && <Badge variant="destructive" className="text-xs">Habis</Badge>}
@@ -552,6 +667,8 @@ function StockInTask({
     setItemId(preSelectedItemId || "");
   }, [preSelectedItemId]);
 
+  const selectedItem = useMemo(() => activeItems.find((i) => i.id === itemId), [activeItems, itemId]);
+
   const canSave = itemId && qty && Number(qty) > 0;
 
   const handleSave = () => {
@@ -586,7 +703,7 @@ function StockInTask({
         <label className="text-sm font-medium text-muted-foreground">Item</label>
         <Select value={itemId} onValueChange={(v) => setItemId(v ?? "")}>
           <SelectTrigger className="h-14 sm:h-12 text-base">
-            <SelectValue placeholder="Pilih item" />
+            <SelectValue placeholder="Pilih item">{selectedItem?.name}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {activeItems.map((item) => (
@@ -644,14 +761,19 @@ function AddItemTask({
   onBack,
 }: {
   preFilledBarcode?: string;
-  onSaved: () => void;
+  onSaved?: (newItemId?: string) => void;
   onBack: () => void;
 }) {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("pcs");
   const [category, setCategory] = useState("Bahan");
   const [minStock, setMinStock] = useState("");
-  const [frequency, setFrequency] = useState<number>(1);
+  const [frequencyValue, setFrequencyValue] = useState<string>("");
+  const [frequencyUnit, setFrequencyUnit] = useState<"hari" | "minggu">("hari");
+  const frequencyDays = useMemo(() => {
+    const val = frequencyValue === "" ? 1 : Number(frequencyValue);
+    return frequencyUnit === "hari" ? val : val * 7;
+  }, [frequencyValue, frequencyUnit]);
   const [barcode, setBarcode] = useState(preFilledBarcode || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -670,7 +792,7 @@ function AddItemTask({
       unit: unit.trim(),
       category: category.trim(),
       minStock: Number(minStock),
-      checkFrequencyDays: frequency,
+      checkFrequencyDays: frequencyDays,
       barcode: barcode.trim() || undefined,
     });
     const session = getSession();
@@ -686,12 +808,13 @@ function AddItemTask({
     setSaved(true);
     triggerFeedback("success");
     toast.success(`Item ${newItem.name} berhasil ditambahkan.`);
-    onSaved();
+    onSaved?.(newItem.id);
     setTimeout(() => {
       setSaved(false);
       setName("");
       setMinStock("");
-      setFrequency(1);
+      setFrequencyValue("");
+      setFrequencyUnit("hari");
       setBarcode("");
     }, 900);
   };
@@ -759,50 +882,30 @@ function AddItemTask({
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-muted-foreground">Cek Setiap</label>
-          <div className="relative">
+          <div className="grid grid-cols-2 gap-3">
             <Input
               type="number"
               inputMode="numeric"
               min={1}
-              max={365}
-              value={frequency}
+              value={frequencyValue}
+              placeholder="0"
               onChange={(e) => {
-                const val = Number(e.target.value);
-                if (!isNaN(val) && val >= 1) setFrequency(val);
+                const val = e.target.value;
+                if (val === "" || /^[0-9]*$/.test(val)) {
+                  setFrequencyValue(val);
+                }
               }}
-              className="h-14 sm:h-12 text-lg sm:text-base text-center font-semibold pr-14"
+              className="h-14 sm:h-12 text-lg sm:text-base text-center font-semibold"
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-              hari
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {[1, 3, 5, 7, 14, 30].map((days) => {
-              const label =
-                days === 1
-                  ? "Harian"
-                  : days === 7
-                  ? "Mingguan"
-                  : days === 14
-                  ? "2 Mingguan"
-                  : days === 30
-                  ? "Bulanan"
-                  : `${days} hari`;
-              return (
-                <button
-                  key={days}
-                  type="button"
-                  onClick={() => setFrequency(days)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
-                    frequency === days
-                      ? "bg-foreground text-background"
-                      : "bg-background text-foreground opacity-60 hover:opacity-100"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+            <Select value={frequencyUnit} onValueChange={(v) => setFrequencyUnit(v as "hari" | "minggu")}>
+              <SelectTrigger className="h-14 sm:h-12 text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hari" className="text-base">hari</SelectItem>
+                <SelectItem value="minggu" className="text-base">minggu</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>

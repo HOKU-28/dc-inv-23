@@ -29,6 +29,7 @@ export interface Item {
   checkFrequencyDays: number;
   isActive: boolean;
   barcode?: string;
+  location?: string;
 }
 
 export interface MonthlyUsage {
@@ -57,4 +58,10 @@ export interface ReorderSuggestion {
   estimatedDaysLeft: number;
   suggestedOrderDate: string;
   urgency: "safe" | "soon" | "urgent";
+}
+
+export interface DailyQueue {
+  date: string;
+  queue: string[];
+  backlog: string[];
 }
