@@ -72,14 +72,32 @@ function triggerFeedback(type: "success" | "error" = "success") {
   }
 }
 
+function normalizeBarcode(barcode: string): string {
+  return barcode.trim().toLowerCase();
+}
+
+function stripLeadingZeros(barcode: string): string {
+  return barcode.replace(/^0+/, "") || "0";
+}
+
 function findItemByBarcode(barcode: string): Item | undefined {
-  const clean = barcode.trim().toLowerCase();
+  const clean = normalizeBarcode(barcode);
   if (!clean) return undefined;
-  return getItems().find(
-    (item) =>
-      item.isActive !== false &&
-      item.barcode?.trim().toLowerCase() === clean
-  );
+
+  return getItems().find((item) => {
+    if (item.isActive === false) return false;
+    const itemCode = normalizeBarcode(item.barcode ?? "");
+    if (!itemCode) return false;
+
+    if (itemCode === clean) return true;
+    // EAN/UPC scanners sometimes return with/without leading zeros.
+    if (stripLeadingZeros(itemCode) === stripLeadingZeros(clean)) return true;
+    // Some scanners pad or drop digits for the same product.
+    if (itemCode.length >= 6 && clean.length >= 6 && (itemCode.includes(clean) || clean.includes(itemCode))) {
+      return true;
+    }
+    return false;
+  });
 }
 
 export default function StaffDashboardPage() {

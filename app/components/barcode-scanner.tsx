@@ -32,10 +32,16 @@ const SCANNER_CONFIG = {
 
 export function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const onScanRef = useRef(onScan);
+  const onErrorRef = useRef(onError);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
   const [activeCamera, setActiveCamera] = useState<string | null>(null);
+
+  // Keep latest callbacks without re-initialising the camera every render.
+  onScanRef.current = onScan;
+  onErrorRef.current = onError;
 
   useEffect(() => {
     let mounted = true;
@@ -63,7 +69,7 @@ export function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
           SCANNER_CONFIG,
           (decodedText) => {
             if (decodedText) {
-              onScan(decodedText.trim());
+              onScanRef.current(decodedText.trim());
             }
           },
           () => {
@@ -77,7 +83,7 @@ export function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
         const message = err instanceof Error ? err.message : "Gagal mengakses kamera.";
         setError(message);
         setLoading(false);
-        onError?.(message);
+        onErrorRef.current?.(message);
       }
     };
 
@@ -89,7 +95,7 @@ export function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
         scannerRef.current.stop().catch(() => {});
       }
     };
-  }, [onScan, onError]);
+  }, []);
 
   const switchCamera = async () => {
     if (!scannerRef.current || cameras.length < 2) return;
@@ -102,7 +108,7 @@ export function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
       await scannerRef.current.start(
         next.id,
         SCANNER_CONFIG,
-        (decodedText) => decodedText && onScan(decodedText.trim()),
+        (decodedText) => decodedText && onScanRef.current(decodedText.trim()),
         () => {}
       );
       setActiveCamera(next.id);
@@ -138,7 +144,7 @@ export function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
         )}
         {!loading && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="w-3/4 h-24 rounded-lg border-2 border-white/70 bg-transparent" />
+            <div className="w-5/6 h-20 rounded-lg border-2 border-white/70 bg-transparent" />
           </div>
         )}
       </div>
