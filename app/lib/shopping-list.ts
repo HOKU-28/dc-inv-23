@@ -11,6 +11,11 @@ export function getShoppingIds(): string[] {
   }
 }
 
+export function saveShoppingIds(ids: string[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SHOPPING_KEY, JSON.stringify(ids));
+}
+
 export function addToShoppingById(itemId: string, itemName: string) {
   const existing = getShoppingIds();
   if (!existing.includes(itemId)) {

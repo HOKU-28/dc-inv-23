@@ -29,11 +29,13 @@ const baseUserSchema = z.object({
 });
 
 const addUserSchema = baseUserSchema.extend({
-  password: z.string().min(1, "Password wajib diisi."),
+  password: z.string().min(6, "Password minimal 6 karakter."),
 });
 
 const editUserSchema = baseUserSchema.extend({
-  password: z.string().optional(),
+  password: z
+    .union([z.string().length(0), z.string().min(6, "Password minimal 6 karakter.")])
+    .optional(),
 });
 
 type AddUserFormValues = z.infer<typeof addUserSchema>;
@@ -91,7 +93,7 @@ export function StaffManagement({ users, onUsersChange }: StaffManagementProps) 
   const handleAdd = async (values: AddUserFormValues) => {
     setIsSubmitting(true);
     try {
-      const created = addUser({
+      const created = await addUser({
         name: values.name,
         email: values.email,
         password: values.password,
@@ -111,7 +113,7 @@ export function StaffManagement({ users, onUsersChange }: StaffManagementProps) 
     if (!editingUser) return;
     setIsSubmitting(true);
     try {
-      const updated = updateUser(editingUser.id, {
+      const updated = await updateUser(editingUser.id, {
         name: values.name,
         email: values.email,
         password: values.password,

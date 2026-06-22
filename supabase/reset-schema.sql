@@ -5,8 +5,10 @@
 DROP TABLE IF EXISTS public.sales CASCADE;
 DROP TABLE IF EXISTS public.stock_logs CASCADE;
 DROP TABLE IF EXISTS public.items CASCADE;
-DROP TABLE IF EXISTS public.stock_in_logs CASCADE;
+DROP TABLE IF EXISTS public.users CASCADE;
 DROP TABLE IF EXISTS public.shopping_list CASCADE;
+DROP TABLE IF EXISTS public.daily_queue CASCADE;
+DROP TABLE IF EXISTS public.stock_in_logs CASCADE;
 
 -- Items table
 CREATE TABLE public.items (
@@ -44,10 +46,39 @@ CREATE TABLE public.sales (
   created_at BIGINT NOT NULL
 );
 
+-- Users table (synced from local auth)
+CREATE TABLE public.users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  password TEXT,
+  password_hash TEXT,
+  recovery_code_hash TEXT,
+  role TEXT NOT NULL,
+  name TEXT NOT NULL,
+  updated_at BIGINT NOT NULL DEFAULT 0
+);
+
+-- Shopping list table
+CREATE TABLE public.shopping_list (
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+
+-- Daily queue table
+CREATE TABLE public.daily_queue (
+  date TEXT PRIMARY KEY,
+  queue JSONB NOT NULL DEFAULT '[]'::jsonb,
+  backlog JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+
 -- Enable Row Level Security
 ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shopping_list ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_queue ENABLE ROW LEVEL SECURITY;
 
 -- Allow anonymous read/write for the exposed anon key.
 CREATE POLICY "Allow anonymous select on items" ON public.items FOR SELECT TO anon USING (true);
@@ -64,6 +95,21 @@ CREATE POLICY "Allow anonymous select on sales" ON public.sales FOR SELECT TO an
 CREATE POLICY "Allow anonymous insert on sales" ON public.sales FOR INSERT TO anon WITH CHECK (true);
 CREATE POLICY "Allow anonymous update on sales" ON public.sales FOR UPDATE TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anonymous delete on sales" ON public.sales FOR DELETE TO anon USING (true);
+
+CREATE POLICY "Allow anonymous select on users" ON public.users FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow anonymous insert on users" ON public.users FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow anonymous update on users" ON public.users FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anonymous delete on users" ON public.users FOR DELETE TO anon USING (true);
+
+CREATE POLICY "Allow anonymous select on shopping_list" ON public.shopping_list FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow anonymous insert on shopping_list" ON public.shopping_list FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow anonymous update on shopping_list" ON public.shopping_list FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anonymous delete on shopping_list" ON public.shopping_list FOR DELETE TO anon USING (true);
+
+CREATE POLICY "Allow anonymous select on daily_queue" ON public.daily_queue FOR SELECT TO anon USING (true);
+CREATE POLICY "Allow anonymous insert on daily_queue" ON public.daily_queue FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow anonymous update on daily_queue" ON public.daily_queue FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anonymous delete on daily_queue" ON public.daily_queue FOR DELETE TO anon USING (true);
 
 -- Refresh PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +13,6 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowLeft,
-  CheckCircle2,
   ClipboardCheck,
   PackagePlus,
   Plus,
@@ -26,6 +24,7 @@ import {
   Loader2,
   MapPin,
   Search,
+  RefreshCw,
 } from "lucide-react";
 import { Item, ItemStatus } from "@/app/types";
 import {
@@ -41,8 +40,10 @@ import {
   saveDailyQueue,
   todayStr,
 } from "@/app/lib/data";
-import { getSession, logout, requireAuth } from "@/app/lib/auth";
+import { getSession } from "@/app/lib/auth";
+import { useAuth } from "@/app/hooks/use-auth";
 import { syncAll } from "@/app/lib/sync";
+import { syncExtra } from "@/app/lib/sync-extra";
 import { isOnline } from "@/app/lib/supabase";
 import { useOnlineStatus } from "@/app/hooks/use-online-status";
 import { DashboardSkeleton } from "@/app/components/skeletons";
@@ -50,6 +51,7 @@ import { useTheme } from "@/app/components/theme-provider";
 import { BarcodeScanner } from "@/app/components/barcode-scanner";
 import { Pagination } from "@/app/components/pagination";
 import { usePagination } from "@/app/hooks/use-pagination";
+import { ConfirmDialog } from "@/app/components/confirm-dialog";
 import { toast } from "sonner";
 
 const HOME_ACTIONS = [
@@ -75,9 +77,11 @@ function findItemByBarcode(barcode: string): Item | undefined {
 }
 
 export default function StaffDashboardPage() {
-  const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const online = useOnlineStatus();
+  const { session, loading: authLoading, logout: handleLogout } = useAuth({
+    expectedRole: "staff",
+  });
   const [mounted, setMounted] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [view, setView] = useState<StaffView>("home");
@@ -85,6 +89,7 @@ export default function StaffDashboardPage() {
   const [statuses, setStatuses] = useState<ItemStatus[]>([]);
   const [scannedItemId, setScannedItemId] = useState<string | null>(null);
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const refresh = () => {
     const activeItems = getActiveItems();
@@ -94,34 +99,40 @@ export default function StaffDashboardPage() {
   };
 
   useEffect(() => {
-    const session = requireAuth("staff");
-    if (!session) {
-      router.replace("/");
-      return;
-    }
+    if (authLoading || !session) return;
 
-    const init = async () => {
-      if (isOnline()) {
-        await syncAll().catch((err) => console.error("[staff] initial sync failed:", err));
-      }
+    const init = () => {
       refresh();
       setMounted(true);
       setInitialLoading(false);
+
+      if (isOnline()) {
+        setIsSyncing(true);
+        syncAll()
+          .then(() => syncExtra())
+          .then(() => refresh())
+          .catch((err) => console.error("[staff] initial sync failed:", err))
+          .finally(() => setIsSyncing(false));
+      }
     };
 
     init();
-  }, [router]);
+  }, [authLoading, session]);
 
   useEffect(() => {
     if (mounted && online) {
-      syncAll().then(() => refresh()).catch((err) => console.error("[staff] syncAll failed:", err));
+      setIsSyncing(true);
+      syncAll()
+        .then(() => syncExtra())
+        .then(() => refresh())
+        .catch((err) => console.error("[staff] sync failed:", err))
+        .finally(() => setIsSyncing(false));
     }
   }, [online, mounted]);
 
-  const handleLogout = () => {
-    logout();
+  const onLogout = () => {
+    handleLogout();
     toast.info("Anda telah keluar.");
-    router.replace("/");
   };
 
   const goHome = () => {
@@ -144,7 +155,7 @@ export default function StaffDashboardPage() {
     }
   };
 
-  if (!mounted || initialLoading) return <DashboardSkeleton />;
+  if (authLoading || !mounted || initialLoading) return <DashboardSkeleton />;
 
   return (
     <div className="min-h-screen bg-background">
@@ -165,6 +176,9 @@ export default function StaffDashboardPage() {
             </button>
           )}
           <div className="flex items-center gap-1">
+            {isSyncing && (
+              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Sinkronisasi..." />
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -177,7 +191,7 @@ export default function StaffDashboardPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleLogout}
+              onClick={onLogout}
               className="h-10 w-10 text-muted-foreground"
               aria-label="Keluar"
             >
@@ -286,13 +300,44 @@ function ScanTask({
   onAdd: () => void;
 }) {
   const item = scannedItemId ? getItems().find((i) => i.id === scannedItemId) : undefined;
+  const [manual, setManual] = useState("");
+
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = manual.trim();
+    if (!value) return;
+    onScan(value);
+  };
 
   return (
     <div className="space-y-5">
       <h2 className="text-xl font-bold text-center">Scan Barcode</h2>
 
       <div className="max-w-md mx-auto sm:max-w-lg">
-        {!scannedBarcode && <BarcodeScanner onScan={onScan} />}
+        {!scannedBarcode && (
+          <div className="space-y-4">
+            <BarcodeScanner onScan={onScan} />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">atau ketik manual</span>
+              </div>
+            </div>
+            <form onSubmit={handleManualSubmit} className="flex gap-2">
+              <Input
+                value={manual}
+                onChange={(e) => setManual(e.target.value)}
+                placeholder="Barcode"
+                className="h-12 flex-1"
+              />
+              <Button type="submit" className="h-12" disabled={!manual.trim()}>
+                Cari
+              </Button>
+            </form>
+          </div>
+        )}
 
         {scannedBarcode && item && (
           <div className="space-y-4">
@@ -364,6 +409,9 @@ function CheckTask({
   const [queueData, setQueueData] = useState(() => getDailyQueue());
   const [showBacklog, setShowBacklog] = useState(false);
   const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const statusMap = useMemo(() => {
     const map = new Map<string, ItemStatus>();
@@ -403,10 +451,10 @@ function CheckTask({
     );
   };
 
-  const needsCheck = (s: ItemStatus): boolean => {
+  function needsCheck(s: ItemStatus): boolean {
     if (s.lastCheckDate === today) return false;
     return !!(s.currentStock <= 0 || s.isLow || s.isOverdue || (s.nextCheckDate && s.nextCheckDate <= today));
-  };
+  }
 
   const rawQueueRemaining = useMemo(() => {
     return queueData.queue
@@ -441,6 +489,57 @@ function CheckTask({
     startIndex,
     endIndex,
   } = usePagination(queueStatuses, { pageSize: 6 });
+
+  const selectableIds = useMemo(() => queueStatuses.map((s) => s.item.id), [queueStatuses]);
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableIds));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    setConfirmOpen(true);
+  };
+
+  const confirmBulkDelete = () => {
+    setBulkDeleting(true);
+    const session = getSession();
+    let count = 0;
+    selectedIds.forEach((id) => {
+      const s = statusMap.get(id);
+      if (!s) return;
+      archiveItem(id);
+      addLog({
+        itemId: id,
+        type: "archive",
+        qty: 0,
+        date: todayStr(),
+        recordedBy: session?.name,
+        note: "Item dihapus/diarsipkan",
+      });
+      count++;
+    });
+    setBulkDeleting(false);
+    setConfirmOpen(false);
+    setSelectedIds(new Set());
+    toast.success(`${count} item berhasil dihapus. Owner dapat mengembalikannya dari Arsip.`);
+    onSaved();
+  };
 
   const handleSaved = () => {
     onSaved();
@@ -478,10 +577,39 @@ function CheckTask({
       )}
 
       {queueStatuses.length > 0 && (
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleSelectAll}
+          >
+            {allSelected ? "Batal Pilih" : "Pilih Semua"}
+          </Button>
+          {someSelected && (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDelete}
+            >
+              Hapus {selectedIds.size} item
+            </Button>
+          )}
+        </div>
+      )}
+
+      {queueStatuses.length > 0 && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {paginatedData.map((status) => (
-              <CheckCard key={status.item.id} status={status} onSaved={handleSaved} />
+              <CheckCard
+                key={status.item.id}
+                status={status}
+                selected={selectedIds.has(status.item.id)}
+                onToggleSelect={() => toggleSelect(status.item.id)}
+                onSaved={handleSaved}
+              />
             ))}
           </div>
 
@@ -509,7 +637,13 @@ function CheckTask({
           {showBacklog && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {backlogStatuses.map((status) => (
-                <CheckCard key={status.item.id} status={status} onSaved={handleSaved} />
+                <CheckCard
+                  key={status.item.id}
+                  status={status}
+                  selected={selectedIds.has(status.item.id)}
+                  onToggleSelect={() => toggleSelect(status.item.id)}
+                  onSaved={handleSaved}
+                />
               ))}
             </div>
           )}
@@ -524,7 +658,13 @@ function CheckTask({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {otherStatuses.map((status) => (
-              <CheckCard key={status.item.id} status={status} onSaved={handleSaved} />
+              <CheckCard
+                key={status.item.id}
+                status={status}
+                selected={selectedIds.has(status.item.id)}
+                onToggleSelect={() => toggleSelect(status.item.id)}
+                onSaved={handleSaved}
+              />
             ))}
           </div>
         </div>
@@ -537,11 +677,33 @@ function CheckTask({
           <Button onClick={() => setQuery("")} className="min-h-[48px] px-8">Bersihkan Pencarian</Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Hapus Item Terpilih?"
+        description={`${selectedIds.size} item akan diarsipkan dan hilang dari daftar aktif. Owner dapat mengembalikannya melalui menu Arsip.`}
+        onConfirm={confirmBulkDelete}
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        variant="destructive"
+        isLoading={bulkDeleting}
+      />
     </div>
   );
 }
 
-function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => void }) {
+function CheckCard({
+  status,
+  selected,
+  onToggleSelect,
+  onSaved,
+}: {
+  status: ItemStatus;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  onSaved: () => void;
+}) {
   const [qty, setQty] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -604,15 +766,24 @@ function CheckCard({ status, onSaved }: { status: ItemStatus; onSaved: () => voi
   return (
     <div className={`rounded-2xl border bg-card p-4 space-y-3 transition-colors ${isOutOfStock ? "border-red-300 bg-red-50/30 dark:bg-red-950/20" : isLowStock ? "border-orange-300 bg-orange-50/30 dark:bg-orange-950/20" : ""}`}>
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="text-lg font-bold leading-tight">{status.item.name}</h3>
-          <p className="text-xs text-muted-foreground">{status.item.category}</p>
-          {status.item.location && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-              <MapPin className="h-3 w-3" />
-              {status.item.location}
-            </p>
-          )}
+        <div className="flex items-start gap-2 min-w-0">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="mt-1.5 h-4 w-4 shrink-0 rounded border-primary text-primary focus:ring-primary"
+            aria-label={`Pilih ${status.item.name}`}
+          />
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold leading-tight">{status.item.name}</h3>
+            <p className="text-xs text-muted-foreground">{status.item.category}</p>
+            {status.item.location && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <MapPin className="h-3 w-3" />
+                {status.item.location}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[55%]">
           {isOutOfStock && <Badge variant="destructive" className="text-xs">Habis</Badge>}

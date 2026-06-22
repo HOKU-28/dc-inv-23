@@ -6,16 +6,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, Coffee, Eye, EyeOff, Loader2, UserCog, Users } from "lucide-react";
-import { login, getSession } from "@/app/lib/auth";
+import { AlertCircle, Coffee, Eye, EyeOff, Loader2, UserCog, Users, ArrowLeft, Copy, Check, ShieldCheck } from "lucide-react";
+import {
+  login,
+  getSession,
+  isSessionValid,
+  createOwner,
+  hasOwner,
+  resetOwnerPassword,
+  UserRole,
+  isRecoveryCodeFormatValid,
+  formatRecoveryCode,
+  normalizeRecoveryCode,
+} from "@/app/lib/auth";
 import { syncAll } from "@/app/lib/sync";
+import { syncExtra } from "@/app/lib/sync-extra";
 import { useOnlineStatus } from "@/app/hooks/use-online-status";
 import { toast } from "sonner";
 import { DashboardSkeleton } from "@/app/components/skeletons";
 
+type Step = "role" | "login" | "setup" | "recovery";
+
 interface FormErrors {
+  name?: string;
   email?: string;
   password?: string;
+  confirmPassword?: string;
+  recoveryCode?: string;
+  agree?: string;
 }
 
 function validateEmail(email: string): string | undefined {
@@ -28,54 +46,158 @@ function validatePassword(password: string): string | undefined {
   if (password.length < 6) return "Password minimal 6 karakter.";
 }
 
+type PasswordStrength = "weak" | "medium" | "strong";
+
+function getPasswordStrength(password: string): PasswordStrength {
+  if (password.length < 8) return "weak";
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSymbol = /[^a-zA-Z0-9]/.test(password);
+  const variety = [hasLower, hasUpper, hasNumber, hasSymbol].filter(Boolean).length;
+  if (password.length >= 12 && variety >= 3) return "strong";
+  if (variety >= 2) return "medium";
+  return "weak";
+}
+
+function strengthLabel(strength: PasswordStrength): string {
+  switch (strength) {
+    case "weak":
+      return "Lemah";
+    case "medium":
+      return "Sedang";
+    case "strong":
+      return "Kuat";
+  }
+}
+
+function strengthColor(strength: PasswordStrength): string {
+  switch (strength) {
+    case "weak":
+      return "bg-red-500";
+    case "medium":
+      return "bg-amber-500";
+    case "strong":
+      return "bg-green-500";
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const online = useOnlineStatus();
+
+  const [step, setStep] = useState<Step>("role");
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  // Setup owner
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+
+  // Login & recovery
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [agreeIrreversible, setAgreeIrreversible] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [generatedRecoveryCode, setGeneratedRecoveryCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const session = getSession();
-    if (session) {
-      router.replace(`/dashboard/${session.role}`);
-    } else {
-      setChecking(false);
-    }
+    let mounted = true;
+
+    const redirectIfValid = async () => {
+      const session = getSession();
+      if (session && (await isSessionValid(session))) {
+        router.replace(`/dashboard/${session.role}`);
+        return;
+      }
+
+      if (!hasOwner()) {
+        setStep("setup");
+      }
+      if (mounted) setChecking(false);
+    };
+
+    redirectIfValid();
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
+
+  // Show auth reason if redirected by useAuth.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reason = sessionStorage.getItem("dominico-auth-reason");
+    if (reason) {
+      toast.info(reason);
+      sessionStorage.removeItem("dominico-auth-reason");
+    }
+  }, []);
 
   useEffect(() => {
     if (online) {
       syncAll().catch((err) => console.error("[login] syncAll failed:", err));
+      syncExtra().catch((err) => console.error("[login] syncExtra failed:", err));
     }
   }, [online]);
 
-  const validateField = (name: keyof FormErrors, value: string) => {
-    setErrors((prev) => ({
-      ...prev,
-      [name]: name === "email" ? validateEmail(value) : validatePassword(value),
-    }));
+  const setFieldError = (name: keyof FormErrors, value: string | undefined) => {
+    setErrors((prev) => ({ ...prev, [name]: value }));
   };
 
-  const validateForm = (): boolean => {
+  const clearErrors = () => setErrors({});
+
+  const handleCreateOwner = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const nameError = !ownerName.trim() ? "Nama wajib diisi." : undefined;
+    const emailError = validateEmail(ownerEmail);
+    const passwordError = validatePassword(password);
+    const confirmError = password !== confirmPassword ? "Password tidak cocok." : undefined;
+
+    setErrors({
+      name: nameError,
+      email: emailError,
+      password: passwordError,
+      confirmPassword: confirmError,
+    });
+
+    if (nameError || emailError || passwordError || confirmError) return;
+
+    setLoading(true);
+    try {
+      const { recoveryCode: code } = await createOwner({
+        name: ownerName,
+        email: ownerEmail,
+        password,
+      });
+      setGeneratedRecoveryCode(code);
+      toast.success("Akun owner berhasil dibuat. Simpan recovery code dengan aman!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal membuat akun owner.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
     const emailError = validateEmail(email);
     const passwordError = validatePassword(password);
     setErrors({ email: emailError, password: passwordError });
-    return !emailError && !passwordError;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!validateForm()) return;
+    if (emailError || passwordError) return;
 
     setLoading(true);
-
-    setTimeout(() => {
-      const session = login(email, password);
+    try {
+      const session = await login(email, password, { rememberMe });
       if (session) {
         toast.success(`Selamat datang, ${session.name}!`);
         router.replace(`/dashboard/${session.role}`);
@@ -84,18 +206,88 @@ export default function LoginPage() {
         toast.error("Email atau password salah.");
         setPassword("");
       }
-    }, 400);
+    } catch (err) {
+      setLoading(false);
+      toast.error(err instanceof Error ? err.message : "Terjadi kesalahan saat login.");
+    }
   };
 
-  const fillDemo = (role: "staff" | "owner") => {
-    if (role === "staff") {
-      setEmail("rina@dominico.com");
-      setPassword("pass123");
-    } else {
-      setEmail("owner@dominico.com");
-      setPassword("word456");
+  const handleRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const normalizedCode = normalizeRecoveryCode(recoveryCode);
+    const codeError = !isRecoveryCodeFormatValid(recoveryCode)
+      ? "Recovery code tidak valid."
+      : undefined;
+    const passwordError = validatePassword(password);
+    const confirmError = password !== confirmPassword ? "Password tidak cocok." : undefined;
+    const agreeError = !agreeIrreversible ? "Centang kotak persetujuan diperlukan." : undefined;
+
+    setErrors({
+      recoveryCode: codeError,
+      password: passwordError,
+      confirmPassword: confirmError,
+      agree: agreeError,
+    });
+
+    if (codeError || passwordError || confirmError || agreeError) return;
+
+    setLoading(true);
+    try {
+      const ok = await resetOwnerPassword(normalizedCode, password);
+      if (ok) {
+        toast.success("Password owner berhasil direset. Silakan login.");
+        setStep("login");
+        setPassword("");
+        setConfirmPassword("");
+        setRecoveryCode("");
+        setAgreeIrreversible(false);
+      } else {
+        toast.error("Recovery code salah atau tidak ada owner.");
+      }
+    } catch {
+      toast.error("Gagal mereset password.");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const copyRecoveryCode = async () => {
+    if (!generatedRecoveryCode) return;
+    try {
+      await navigator.clipboard.writeText(generatedRecoveryCode);
+      setCopied(true);
+      toast.success("Recovery code disalin.");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Gagal menyalin.");
+    }
+  };
+
+  const selectRole = (role: UserRole) => {
+    setSelectedRole(role);
+    setEmail("");
+    setPassword("");
+    setRememberMe(false);
     setErrors({});
+    setStep("login");
+  };
+
+  const goToRecovery = () => {
+    clearErrors();
+    setRecoveryCode("");
+    setPassword("");
+    setConfirmPassword("");
+    setAgreeIrreversible(false);
+    setStep("recovery");
+  };
+
+  const goBackToRole = () => {
+    setSelectedRole(null);
+    setEmail("");
+    setPassword("");
+    clearErrors();
+    setStep("role");
   };
 
   if (checking) {
@@ -113,117 +305,423 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground">Masuk untuk mencatat & memantau stok</p>
         </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Login</CardTitle>
-            <CardDescription>Masukkan email dan password Anda</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="timdominico@gmail.com"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (errors.email) validateField("email", e.target.value);
-                  }}
-                  onBlur={(e) => validateField("email", e.target.value)}
-                  disabled={loading}
-                  aria-invalid={!!errors.email}
-                  className={errors.email ? "border-destructive focus-visible:ring-destructive" : ""}
-                />
-                {errors.email && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    {errors.email}
-                  </p>
-                )}
-              </div>
+        {step === "setup" && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Setup Owner Pertama</CardTitle>
+              <CardDescription>Buat akun owner untuk mulai menggunakan sistem</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!generatedRecoveryCode ? (
+                <form onSubmit={handleCreateOwner} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ownerName">Nama Owner</Label>
+                    <Input
+                      id="ownerName"
+                      placeholder="Nama lengkap"
+                      value={ownerName}
+                      onChange={(e) => {
+                        setOwnerName(e.target.value);
+                        if (errors.name) setFieldError("name", undefined);
+                      }}
+                      disabled={loading}
+                    />
+                    {errors.name && <ErrorMessage message={errors.name} />}
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    placeholder="••••••••"
+                  <div className="space-y-2">
+                    <Label htmlFor="ownerEmail">Email</Label>
+                    <Input
+                      id="ownerEmail"
+                      type="email"
+                      placeholder="owner@dominico.com"
+                      value={ownerEmail}
+                      onChange={(e) => {
+                        setOwnerEmail(e.target.value);
+                        if (errors.email) setFieldError("email", undefined);
+                      }}
+                      disabled={loading}
+                    />
+                    {errors.email && <ErrorMessage message={errors.email} />}
+                  </div>
+
+                  <PasswordField
+                    id="setupPassword"
+                    label="Password"
                     value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (errors.password) validateField("password", e.target.value);
+                    onChange={(v) => {
+                      setPassword(v);
+                      if (errors.password) setFieldError("password", undefined);
                     }}
-                    onBlur={(e) => validateField("password", e.target.value)}
+                    show={showPassword}
+                    onToggle={() => setShowPassword((v) => !v)}
                     disabled={loading}
-                    aria-invalid={!!errors.password}
-                    className={`pr-10 ${errors.password ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                    error={errors.password}
+                    showStrength
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+
+                  <PasswordField
+                    id="setupConfirmPassword"
+                    label="Konfirmasi Password"
+                    value={confirmPassword}
+                    onChange={(v) => {
+                      setConfirmPassword(v);
+                      if (errors.confirmPassword) setFieldError("confirmPassword", undefined);
+                    }}
+                    show={showPassword}
+                    onToggle={() => setShowPassword((v) => !v)}
+                    disabled={loading}
+                    error={errors.confirmPassword}
+                  />
+
+                  <Button type="submit" className="w-full min-h-11" disabled={loading}>
+                    {loading ? <LoadingText /> : "Buat Akun Owner"}
+                  </Button>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-100">
+                    <p className="text-sm font-medium mb-2">
+                      Simpan recovery code ini dengan amat sangat hati-hati!
+                    </p>
+                    <p className="text-xs opacity-80 mb-3">
+                      Code ini hanya ditampilkan sekali. Gunakan untuk reset password owner jika lupa.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 rounded bg-white/70 dark:bg-black/30 px-3 py-2 text-sm font-mono tracking-wide">
+                        {generatedRecoveryCode}
+                      </code>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={copyRecoveryCode}
+                      >
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      setGeneratedRecoveryCode(null);
+                      setStep("role");
+                      setPassword("");
+                      setConfirmPassword("");
+                    }}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    Saya Sudah Menyimpannya — Lanjut ke Login
+                  </Button>
                 </div>
-                {errors.password && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    {errors.password}
-                  </p>
-                )}
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {step === "role" && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Pilih Role</CardTitle>
+              <CardDescription>Login sebagai owner atau staff</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => selectRole("owner")}
+                  className="h-auto flex-col gap-2 py-6"
+                >
+                  <UserCog className="h-6 w-6" />
+                  <span className="font-semibold">Owner</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => selectRole("staff")}
+                  className="h-auto flex-col gap-2 py-6"
+                >
+                  <Users className="h-6 w-6" />
+                  <span className="font-semibold">Staff</span>
+                </Button>
               </div>
+            </CardContent>
+          </Card>
+        )}
 
-              <Button type="submit" className="w-full min-h-11" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Memeriksa...
-                  </>
-                ) : (
-                  "Masuk"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        {step === "login" && selectedRole && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 -ml-2"
+                  onClick={goBackToRole}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <CardTitle className="text-base">Login sebagai {capitalize(selectedRole)}</CardTitle>
+                  <CardDescription>Masukkan email dan password</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder={selectedRole === "owner" ? "owner@dominico.com" : "staff@dominico.com"}
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (errors.email) setFieldError("email", undefined);
+                    }}
+                    disabled={loading}
+                  />
+                  {errors.email && <ErrorMessage message={errors.email} />}
+                </div>
 
-        <div className="rounded-lg border bg-card p-4 space-y-3">
-          <p className="text-xs font-medium text-muted-foreground">Demo cepat</p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fillDemo("staff")}
-              className="w-full"
-            >
-              <Users className="h-3.5 w-3.5 mr-1.5" />
-              Staff
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fillDemo("owner")}
-              className="w-full"
-            >
-              <UserCog className="h-3.5 w-3.5 mr-1.5" />
-              Owner
-            </Button>
+                <PasswordField
+                  id="password"
+                  label="Password"
+                  value={password}
+                  onChange={(v) => {
+                    setPassword(v);
+                    if (errors.password) setFieldError("password", undefined);
+                  }}
+                  show={showPassword}
+                  onToggle={() => setShowPassword((v) => !v)}
+                  disabled={loading}
+                  error={errors.password}
+                />
+
+                <div className="flex items-start gap-2">
+                  <input
+                    id="rememberMe"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    disabled={loading}
+                    className="mt-0.5 h-4 w-4 rounded border-primary text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <Label htmlFor="rememberMe" className="text-xs font-normal leading-relaxed cursor-pointer">
+                    Ingat saya di perangkat ini (30 hari)
+                  </Label>
+                </div>
+
+                <Button type="submit" className="w-full min-h-11" disabled={loading}>
+                  {loading ? <LoadingText /> : "Masuk"}
+                </Button>
+              </form>
+
+              {selectedRole === "owner" && (
+                <button
+                  type="button"
+                  onClick={goToRecovery}
+                  className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground underline"
+                >
+                  Lupa password owner?
+                </button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {step === "recovery" && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 -ml-2"
+                  onClick={() => setStep("login")}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <CardTitle className="text-base">Reset Password Owner</CardTitle>
+                  <CardDescription>Masukkan recovery code dan password baru</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleRecovery} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="recoveryCode">Recovery Code</Label>
+                  <div className="relative">
+                    <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="recoveryCode"
+                      placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+                      value={recoveryCode}
+                      onChange={(e) => {
+                        const raw = e.target.value.toUpperCase();
+                        const formatted = formatRecoveryCode(raw);
+                        setRecoveryCode(formatted.slice(0, 29)); // 24 chars + 5 dashes
+                        if (errors.recoveryCode) setFieldError("recoveryCode", undefined);
+                      }}
+                      disabled={loading}
+                      className="pl-9 font-mono tracking-wide"
+                    />
+                  </div>
+                  {errors.recoveryCode && <ErrorMessage message={errors.recoveryCode} />}
+                </div>
+
+                <PasswordField
+                  id="recoveryPassword"
+                  label="Password Baru"
+                  value={password}
+                  onChange={(v) => {
+                    setPassword(v);
+                    if (errors.password) setFieldError("password", undefined);
+                  }}
+                  show={showPassword}
+                  onToggle={() => setShowPassword((v) => !v)}
+                  disabled={loading}
+                  error={errors.password}
+                  showStrength
+                />
+
+                <PasswordField
+                  id="recoveryConfirmPassword"
+                  label="Konfirmasi Password Baru"
+                  value={confirmPassword}
+                  onChange={(v) => {
+                    setConfirmPassword(v);
+                    if (errors.confirmPassword) setFieldError("confirmPassword", undefined);
+                  }}
+                  show={showPassword}
+                  onToggle={() => setShowPassword((v) => !v)}
+                  disabled={loading}
+                  error={errors.confirmPassword}
+                />
+
+                <div className="flex items-start gap-2">
+                  <input
+                    id="agree"
+                    type="checkbox"
+                    checked={agreeIrreversible}
+                    onChange={(e) => {
+                      setAgreeIrreversible(e.target.checked);
+                      if (errors.agree) setFieldError("agree", undefined);
+                    }}
+                    disabled={loading}
+                    className="mt-0.5 h-4 w-4 rounded border-primary text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <Label htmlFor="agree" className="text-xs font-normal leading-relaxed cursor-pointer">
+                    Saya mengerti tindakan ini tidak bisa dibatalkan setelah password berhasil diganti.
+                  </Label>
+                </div>
+                {errors.agree && <ErrorMessage message={errors.agree} />}
+
+                <Button type="submit" className="w-full min-h-11" disabled={loading}>
+                  {loading ? <LoadingText /> : "Reset Password"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ErrorMessage({ message }: { message: string }) {
+  return (
+    <p className="text-xs text-destructive flex items-center gap-1">
+      <AlertCircle className="h-3 w-3" />
+      {message}
+    </p>
+  );
+}
+
+function LoadingText() {
+  return (
+    <>
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      Memproses...
+    </>
+  );
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+interface PasswordFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  show: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  error?: string;
+  showStrength?: boolean;
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  show,
+  onToggle,
+  disabled,
+  error,
+  showStrength,
+}: PasswordFieldProps) {
+  const strength = getPasswordStrength(value);
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type={show ? "text" : "password"}
+          autoComplete={id === "password" ? "current-password" : "new-password"}
+          placeholder="••••••••"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className={`pr-10 ${error ? "border-destructive focus-visible:ring-destructive" : ""}`}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          tabIndex={-1}
+          aria-label={show ? "Sembunyikan password" : "Tampilkan password"}
+        >
+          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+      {showStrength && value && (
+        <div className="space-y-1">
+          <div className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className={`${strengthColor(strength)} transition-all`}
+              style={{
+                width: strength === "weak" ? "33%" : strength === "medium" ? "66%" : "100%",
+              }}
+            />
           </div>
-          <p className="text-[10px] text-muted-foreground text-center">
-            Tombol demo mengisi form secara otomatis. Kredensial tidak ditampilkan demi keamanan.
+          <p className="text-xs text-muted-foreground">
+            Kekuatan password: <span className="font-medium text-foreground">{strengthLabel(strength)}</span>
           </p>
         </div>
-      </div>
+      )}
+      {error && <ErrorMessage message={error} />}
     </div>
   );
 }

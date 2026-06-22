@@ -10,9 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Archive, ArchiveRestore, FileDown, FileSpreadsheet, AlertCircle, Loader2 } from "lucide-react";
+import { Plus, Search, Archive, ArchiveRestore, Trash2, FileDown, FileSpreadsheet, AlertCircle, Loader2 } from "lucide-react";
 import { Item, StockLog } from "@/app/types";
-import { addItem, archiveItem, formatDate, getItemStatus, restoreItem } from "@/app/lib/data";
+import { addItem, archiveItem, deleteItem, formatDate, getItemStatus, restoreItem } from "@/app/lib/data";
 import { toast } from "sonner";
 import { EmptyState } from "@/app/components/empty-state";
 import { ConfirmDialog } from "@/app/components/confirm-dialog";
@@ -52,6 +52,12 @@ export function ItemTab({
     action: "archive" | "restore";
   }>({ open: false, itemId: null, itemName: "", action: "archive" });
   const [isArchiving, setIsArchiving] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    itemId: string | null;
+    itemName: string;
+  }>({ open: false, itemId: null, itemName: "" });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const {
     register,
@@ -144,6 +150,29 @@ export function ItemTab({
       toast.error("Gagal memperbarui status item.");
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  const openDeleteDialog = (item: Item) => {
+    setDeleteDialog({ open: true, itemId: item.id, itemName: item.name });
+  };
+
+  const handleDeletePermanent = async () => {
+    if (!deleteDialog.itemId) return;
+    setIsDeleting(true);
+    try {
+      const ok = await deleteItem(deleteDialog.itemId);
+      if (ok) {
+        toast.success(`Item "${deleteDialog.itemName}" telah dihapus permanen.`);
+        onItemsChange();
+      } else {
+        toast.error("Item tidak ditemukan.");
+      }
+    } catch {
+      toast.error("Gagal menghapus item.");
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialog((prev) => ({ ...prev, open: false }));
     }
   };
 
@@ -338,6 +367,11 @@ export function ItemTab({
           visibleItems.map((item) => {
             const status = getItemStatus(item, logs);
             const isArchived = item.isActive === false;
+            const lastArchiveLog = isArchived
+              ? [...logs]
+                  .filter((l) => l.itemId === item.id && l.type === "archive")
+                  .sort((a, b) => b.createdAt - a.createdAt)[0]
+              : undefined;
             return (
               <Card
                 key={item.id}
@@ -352,6 +386,11 @@ export function ItemTab({
                       <p className="text-xs text-muted-foreground">
                         {item.category} · satuan {item.unit}
                       </p>
+                      {lastArchiveLog?.recordedBy && (
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                          Dihapus oleh {lastArchiveLog.recordedBy}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-bold leading-none">
@@ -381,15 +420,26 @@ export function ItemTab({
                       </span>
                     </div>
                     {isArchived ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openRestoreDialog(item)}
-                        className="gap-1.5"
-                      >
-                        <ArchiveRestore className="h-3.5 w-3.5" />
-                        Aktifkan
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openRestoreDialog(item)}
+                          className="gap-1.5"
+                        >
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          Aktifkan
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => openDeleteDialog(item)}
+                          className="gap-1.5"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Hapus
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
@@ -432,6 +482,18 @@ export function ItemTab({
         cancelLabel="Batal"
         variant={confirmDialog.action === "archive" ? "destructive" : "default"}
         isLoading={isArchiving}
+      />
+
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}
+        title="Hapus Item Permanen?"
+        description={`Item "${deleteDialog.itemName}" akan dihapus sepenuhnya dan tidak bisa dikembalikan lagi. Tindakan ini tidak mempengaruhi log aktivitas yang sudah tercatat.`}
+        onConfirm={handleDeletePermanent}
+        confirmLabel="Hapus Permanen"
+        cancelLabel="Batal"
+        variant="destructive"
+        isLoading={isDeleting}
       />
     </div>
   );

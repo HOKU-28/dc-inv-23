@@ -1,6 +1,8 @@
 import { Item, StockLog, Sale, MonthlyUsage, ItemStatus, ReorderSuggestion, DailyQueue } from "@/app/types";
 import { removeFromShoppingById } from "@/app/lib/shopping-list";
 import { syncItems, syncLogs, syncSales } from "@/app/lib/sync";
+import { pushDailyQueue } from "@/app/lib/sync-extra";
+import { supabase, isOnline } from "@/app/lib/supabase";
 
 const ITEMS_KEY = "dominico-items";
 const LOGS_KEY = "dominico-logs";
@@ -257,6 +259,36 @@ export function restoreItem(id: string): Item | undefined {
   return items[index];
 }
 
+export async function deleteItem(id: string): Promise<boolean> {
+  const before = getItems();
+  const filtered = before.filter((i) => i.id !== id);
+  if (filtered.length === before.length) return false;
+
+  saveItems(filtered);
+
+  // Remove from daily queue so it doesn't reappear as a ghost task.
+  const queue = getDailyQueue();
+  const updatedQueue: DailyQueue = {
+    ...queue,
+    queue: queue.queue.filter((i) => i !== id),
+    backlog: queue.backlog.filter((i) => i !== id),
+  };
+  saveDailyQueue(updatedQueue);
+
+  // Remove from shopping list if present.
+  removeFromShoppingById(id);
+
+  // Delete from Supabase if online.
+  if (isOnline()) {
+    const { error } = await supabase.from("items").delete().eq("id", id);
+    if (error) {
+      console.error("[data] deleteItem remote failed:", error);
+    }
+  }
+
+  return true;
+}
+
 export function getActiveItems(items?: Item[]): Item[] {
   return (items ?? getItems()).filter((i) => i.isActive !== false);
 }
@@ -395,7 +427,7 @@ export function refillDailyQueue(date: string = todayStr()): DailyQueue {
   };
 
   const queue = current.queue.filter((id) => !isDone(id));
-  let backlog = current.backlog.filter((id) => !isDone(id));
+  const backlog = current.backlog.filter((id) => !isDone(id));
 
   while (queue.length < 10 && backlog.length > 0) {
     queue.push(backlog.shift()!);
@@ -421,6 +453,7 @@ export function getDailyQueue(date: string = todayStr()): DailyQueue {
 export function saveDailyQueue(queue: DailyQueue) {
   if (typeof window === "undefined") return;
   localStorage.setItem(DAILY_QUEUE_KEY, JSON.stringify(queue));
+  pushDailyQueue().catch((err) => console.error("[data] pushDailyQueue failed:", err));
 }
 
 export function resetDailyQueue() {

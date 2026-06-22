@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Pagination } from "@/app/components/pagination";
 import { usePagination } from "@/app/hooks/use-pagination";
 import {
@@ -24,17 +24,20 @@ import {
   Loader2,
   TrendingUp,
   PackageCheck,
+  Package,
   CheckCircle2,
   FileSpreadsheet,
   FileDown,
   UserCog,
   MapPin,
-  QrCode,
-  Database,
-  Upload,
-  Download,
+  ShieldCheck,
+  Key,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import { ItemStatus, StockLog } from "@/app/types";
+import { Item, ItemStatus, StockLog } from "@/app/types";
 import {
   deleteLog,
   formatDate,
@@ -46,23 +49,27 @@ import {
   getYearlyUsage,
   todayStr,
 } from "@/app/lib/data";
-import { downloadBackup, readBackupFile, restoreBackup } from "@/app/lib/backup";
-import { User } from "@/app/lib/auth";
+import { User, regenerateOwnerRecoveryCode, formatRecoveryCode } from "@/app/lib/auth";
 import { toast } from "sonner";
 import { StaffManagement } from "./staff-management";
+import { ItemTab } from "./item-tab";
 
 export function OwnerDashboard({
+  items,
   statuses,
   logs,
   users,
+  onItemsChange,
   onUsersChange,
 }: {
+  items: Item[];
   statuses: ItemStatus[];
   logs: StockLog[];
   users: User[];
+  onItemsChange: () => void;
   onUsersChange: () => void;
 }) {
-  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "staff" | "allGood" | "staffManagement" | "backup" | null>(null);
+  const [drillDown, setDrillDown] = useState<"habis" | "menipis" | "allGood" | "staff" | "staffManagement" | "recoveryCode" | "items" | null>(null);
 
   const habisItems = statuses.filter((s) => s.currentStock <= 0 || s.isOverdue);
   const menipisItems = statuses.filter(
@@ -96,15 +103,22 @@ export function OwnerDashboard({
       </div>
     );
   }
-  if (drillDown === "backup") {
+  if (drillDown === "recoveryCode") {
     return (
       <div className="space-y-4">
-        <DrillDownHeader title="Backup & Restore" onBack={() => setDrillDown(null)} />
-        <BackupDrillDown />
+        <DrillDownHeader title="Recovery Code Owner" onBack={() => setDrillDown(null)} />
+        <RecoveryCodeDrillDown />
       </div>
     );
   }
-
+  if (drillDown === "items") {
+    return (
+      <div className="space-y-4">
+        <DrillDownHeader title="Kelola Item" onBack={() => setDrillDown(null)} />
+        <ItemTab items={items} logs={logs} onItemsChange={onItemsChange} />
+      </div>
+    );
+  }
   const alertCount = (habisItems.length > 0 ? 1 : 0) + (menipisItems.length > 0 ? 1 : 0);
 
   return (
@@ -133,11 +147,11 @@ export function OwnerDashboard({
         <RekapSection statuses={statuses} logs={logs} />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ItemsSection onDrillDown={() => setDrillDown("items")} />
         <StaffSection logs={logs} onDrillDown={() => setDrillDown("staff")} />
         <StaffManagementSection onDrillDown={() => setDrillDown("staffManagement")} />
-        <LabelsSection />
-        <BackupSection onDrillDown={() => setDrillDown("backup")} />
+        <RecoveryCodeSection onDrillDown={() => setDrillDown("recoveryCode")} />
       </div>
 
       <AllGoodSection items={goodItems} onDrillDown={() => setDrillDown("allGood")} />
@@ -327,12 +341,14 @@ function InsightSection({ statuses, logs }: { statuses: ItemStatus[]; logs: Stoc
   const data = useMemo(() => getInsightForPeriod(statuses, logs, period), [statuses, logs, period]);
   const top = data[0];
 
-  if (!top) return null;
-
-  const chartData = data.slice(0, 5).map((d) => ({
-    name: d.item.name,
-    terpakai: Math.round(d.used),
-  }));
+  const chartData = useMemo(
+    () =>
+      data.slice(0, 5).map((d) => ({
+        name: d.item.name,
+        terpakai: Math.round(d.used),
+      })),
+    [data]
+  );
 
   return (
     <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950 dark:bg-blue-950 dark:border-blue-900 dark:text-blue-100">
@@ -341,26 +357,37 @@ function InsightSection({ statuses, logs }: { statuses: ItemStatus[]; logs: Stoc
           <TrendingUp className="h-6 w-6" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-bold leading-tight">
-            {top.item.name} paling laris
-          </h3>
-          <p className="text-sm opacity-80 mt-1">
-            {PERIOD_LABELS[period]}: terpakai {Math.round(top.used)} {top.item.unit}
-          </p>
+          {top ? (
+            <>
+              <h3 className="text-base font-bold leading-tight">{top.item.name} paling laris</h3>
+              <p className="text-sm opacity-80 mt-1">
+                {PERIOD_LABELS[period]}: terpakai {Math.round(top.used)} {top.item.unit}
+              </p>
+            </>
+          ) : (
+            <>
+              <h3 className="text-base font-bold leading-tight">Belum ada data penggunaan</h3>
+              <p className="text-sm opacity-80 mt-1">
+                Tidak ada item yang terpakai di periode {PERIOD_LABELS[period].toLowerCase()}.
+              </p>
+            </>
+          )}
           <div className="mt-3" onClick={(e) => e.stopPropagation()}>
             <PeriodTabs value={period} onChange={setPeriod} />
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded((v) => !v);
-            }}
-            className="mt-3 text-sm font-semibold text-blue-700 dark:text-blue-200 flex items-center gap-1"
-          >
-            {expanded ? "Sembunyikan" : "Detail Lengkap"} {expanded ? "↑" : "→"}
-          </button>
+          {top && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded((v) => !v);
+              }}
+              className="mt-3 text-sm font-semibold text-blue-700 dark:text-blue-200 flex items-center gap-1"
+            >
+              {expanded ? "Sembunyikan" : "Detail Lengkap"} {expanded ? "↑" : "→"}
+            </button>
+          )}
 
-          {expanded && (
+          {expanded && top && (
             <div className="mt-4 space-y-3">
               <div className="h-48 w-full rounded-xl bg-white/60 dark:bg-blue-950/40 p-2">
                 <ResponsiveContainer width="100%" height="100%">
@@ -523,6 +550,26 @@ function RekapSection({ statuses, logs }: { statuses: ItemStatus[]; logs: StockL
   );
 }
 
+function ItemsSection({ onDrillDown }: { onDrillDown: () => void }) {
+  return (
+    <div
+      onClick={onDrillDown}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onDrillDown()}
+      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Package className="h-5 w-5" />
+          <p className="text-sm font-medium">Kelola Item</p>
+        </div>
+        <span className="text-xs font-semibold opacity-80">Detail Lengkap →</span>
+      </div>
+    </div>
+  );
+}
+
 function StaffSection({ logs, onDrillDown }: { logs: StockLog[]; onDrillDown: () => void }) {
   const today = todayStr();
   const hasCheckToday = logs.some((l) => l.type === "check" && l.date === today);
@@ -568,28 +615,7 @@ function StaffManagementSection({ onDrillDown }: { onDrillDown: () => void }) {
   );
 }
 
-function LabelsSection() {
-  const router = useRouter();
-  return (
-    <div
-      onClick={() => router.push("/dashboard/owner/labels")}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && router.push("/dashboard/owner/labels")}
-      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <QrCode className="h-5 w-5" />
-          <p className="text-sm font-medium">Cetak Label QR</p>
-        </div>
-        <span className="text-xs font-semibold opacity-80">Buka →</span>
-      </div>
-    </div>
-  );
-}
-
-function BackupSection({ onDrillDown }: { onDrillDown: () => void }) {
+function RecoveryCodeSection({ onDrillDown }: { onDrillDown: () => void }) {
   return (
     <div
       onClick={onDrillDown}
@@ -600,79 +626,10 @@ function BackupSection({ onDrillDown }: { onDrillDown: () => void }) {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Database className="h-5 w-5" />
-          <p className="text-sm font-medium">Backup & Restore</p>
+          <ShieldCheck className="h-5 w-5" />
+          <p className="text-sm font-medium">Recovery Code</p>
         </div>
-        <span className="text-xs font-semibold opacity-80">Buka →</span>
-      </div>
-    </div>
-  );
-}
-
-function BackupDrillDown() {
-  const [file, setFile] = useState<File | null>(null);
-  const [restoring, setRestoring] = useState(false);
-
-  const handleDownload = () => {
-    downloadBackup();
-    toast.success("File backup sedang diunduh.");
-  };
-
-  const handleRestore = async () => {
-    if (!file) return;
-    if (!confirm("Restore akan menimpa data saat ini. Lanjutkan?")) return;
-    setRestoring(true);
-    try {
-      const backup = await readBackupFile(file);
-      restoreBackup(backup);
-      toast.success("Backup berhasil direstore. Halaman akan dimuat ulang.");
-      setTimeout(() => window.location.reload(), 800);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Gagal restore backup.");
-    } finally {
-      setRestoring(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border bg-card p-5 space-y-4">
-        <div>
-          <h3 className="font-bold flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Download Backup
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">Simpan semua data sebagai file JSON.</p>
-        </div>
-        <Button onClick={handleDownload} className="w-full h-12">
-          <Download className="h-4 w-4 mr-2" />
-          Unduh Backup
-        </Button>
-      </div>
-
-      <div className="rounded-2xl border bg-card p-5 space-y-4">
-        <div>
-          <h3 className="font-bold flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            Restore Backup
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">Pilih file JSON backup sebelumnya.</p>
-        </div>
-        <Input
-          type="file"
-          accept="application/json,.json"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="h-12"
-        />
-        <Button
-          onClick={handleRestore}
-          disabled={!file || restoring}
-          variant="outline"
-          className="w-full h-12"
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          {restoring ? "Merestore..." : "Restore Backup"}
-        </Button>
+        <span className="text-xs font-semibold opacity-80">Detail Lengkap →</span>
       </div>
     </div>
   );
@@ -988,6 +945,116 @@ function StaffDrillDown({ logs, onBack }: { logs: StockLog[]; onBack: () => void
         endIndex={endIndex}
         onPageChange={setCurrentPage}
       />
+    </div>
+  );
+}
+
+function RecoveryCodeDrillDown() {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [newCode, setNewCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    setLoading(true);
+    try {
+      const result = await regenerateOwnerRecoveryCode(password);
+      if (result) {
+        setNewCode(result.code);
+        toast.success("Recovery code baru berhasil dibuat. Simpan dengan aman!");
+      } else {
+        toast.error("Password salah. Recovery code tidak dapat dibuat.");
+      }
+    } catch {
+      toast.error("Gagal membuat recovery code baru.");
+    } finally {
+      setLoading(false);
+      setPassword("");
+    }
+  };
+
+  const copyCode = async () => {
+    if (!newCode) return;
+    try {
+      await navigator.clipboard.writeText(newCode);
+      setCopied(true);
+      toast.success("Recovery code disalin.");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Gagal menyalin.");
+    }
+  };
+
+  return (
+    <div className="space-y-4 max-w-md">
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900 dark:text-amber-300 shrink-0">
+              <Key className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-bold">Recovery Code Owner</h3>
+              <p className="text-sm text-muted-foreground">
+                Code ini digunakan untuk reset password owner jika lupa. Kami tidak menyimpannya dalam bentuk asli,
+                hanya hash-nya. Jika kamu lupa code lama, buat code baru di sini.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {!newCode ? (
+        <form onSubmit={handleGenerate} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="recovery-password">Password Owner Saat Ini</Label>
+            <div className="relative">
+              <Input
+                id="recovery-password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Masukkan password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+                aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <Button type="submit" disabled={!password || loading} className="w-full">
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Key className="mr-2 h-4 w-4" />}
+            Buat Recovery Code Baru
+          </Button>
+        </form>
+      ) : (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-100">
+            <p className="text-sm font-medium mb-2">Recovery code baru (hanya ditampilkan sekali):</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded bg-white/70 dark:bg-black/30 px-3 py-2 text-sm font-mono tracking-wide">
+                {formatRecoveryCode(newCode)}
+              </code>
+              <Button type="button" size="icon" variant="outline" onClick={copyCode}>
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+          <Button variant="outline" className="w-full" onClick={() => setNewCode(null)}>
+            Buat Code Lain
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
