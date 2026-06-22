@@ -557,11 +557,11 @@ function ItemsSection({ onDrillDown }: { onDrillDown: () => void }) {
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onDrillDown()}
-      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
+      className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-cyan-900 transition-transform active:scale-[0.98] dark:border-cyan-900 dark:bg-cyan-950 dark:text-cyan-100"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Package className="h-5 w-5" />
+          <Package className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
           <p className="text-sm font-medium">Kelola Item</p>
         </div>
         <span className="text-xs font-semibold opacity-80">Detail Lengkap →</span>
@@ -580,11 +580,11 @@ function StaffSection({ logs, onDrillDown }: { logs: StockLog[]; onDrillDown: ()
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onDrillDown()}
-      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
+      className="rounded-xl border border-[#c8a27a] bg-[#f5e6d3] p-3 text-[#5d3a1a] transition-transform active:scale-[0.98] dark:border-[#7a5c3c] dark:bg-[#3d2b1f] dark:text-[#eed9b3]"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Users className="h-5 w-5" />
+          <Users className="h-5 w-5 text-[#8b5a2b] dark:text-[#d4a574]" />
           <p className="text-sm font-medium">
             {hasCheckToday ? "Pengecekan harian telah dilakukan" : "Pengecekan harian belum tercatat"}
           </p>
@@ -602,11 +602,11 @@ function StaffManagementSection({ onDrillDown }: { onDrillDown: () => void }) {
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onDrillDown()}
-      className="rounded-xl border bg-muted/50 p-3 text-muted-foreground transition-transform active:scale-[0.98]"
+      className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-purple-900 transition-transform active:scale-[0.98] dark:border-purple-900 dark:bg-purple-950 dark:text-purple-100"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <UserCog className="h-5 w-5" />
+          <UserCog className="h-5 w-5 text-purple-600 dark:text-purple-300" />
           <p className="text-sm font-medium">Kelola Staff</p>
         </div>
         <span className="text-xs font-semibold opacity-80">Detail Lengkap →</span>
