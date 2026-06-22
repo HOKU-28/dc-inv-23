@@ -73,7 +73,13 @@ function triggerFeedback(type: "success" | "error" = "success") {
 }
 
 function findItemByBarcode(barcode: string): Item | undefined {
-  return getItems().find((item) => item.isActive !== false && item.barcode === barcode);
+  const clean = barcode.trim().toLowerCase();
+  if (!clean) return undefined;
+  return getItems().find(
+    (item) =>
+      item.isActive !== false &&
+      item.barcode?.trim().toLowerCase() === clean
+  );
 }
 
 export default function StaffDashboardPage() {
