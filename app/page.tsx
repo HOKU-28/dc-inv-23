@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,12 +100,12 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [agreeIrreversible, setAgreeIrreversible] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [generatedRecoveryCode, setGeneratedRecoveryCode] = useState<string | null>(null);
+  const loggingInRef = useRef(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -189,26 +189,30 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loggingInRef.current || loading) return;
 
     const emailError = validateEmail(email);
     const passwordError = validatePassword(password);
     setErrors({ email: emailError, password: passwordError });
     if (emailError || passwordError) return;
 
+    loggingInRef.current = true;
     setLoading(true);
     try {
-      const session = await login(email, password, { rememberMe });
+      const session = await login(email, password, { rememberMe: false });
       if (session) {
         toast.success(`Selamat datang, ${session.name}!`);
         router.replace(`/dashboard/${session.role}`);
       } else {
         setLoading(false);
-        toast.error("Email atau password salah.");
         setPassword("");
+        toast.error("Email atau password salah.");
       }
     } catch (err) {
       setLoading(false);
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan saat login.");
+    } finally {
+      loggingInRef.current = false;
     }
   };
 
@@ -268,7 +272,6 @@ export default function LoginPage() {
     setSelectedRole(role);
     setEmail("");
     setPassword("");
-    setRememberMe(false);
     setErrors({});
     setStep("login");
   };
@@ -502,20 +505,6 @@ export default function LoginPage() {
                   disabled={loading}
                   error={errors.password}
                 />
-
-                <div className="flex items-start gap-2">
-                  <input
-                    id="rememberMe"
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    disabled={loading}
-                    className="mt-0.5 h-4 w-4 rounded border-primary text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                  <Label htmlFor="rememberMe" className="text-xs font-normal leading-relaxed cursor-pointer">
-                    Ingat saya di perangkat ini (30 hari)
-                  </Label>
-                </div>
 
                 <Button type="submit" className="w-full min-h-11" disabled={loading}>
                   {loading ? <LoadingText /> : "Masuk"}

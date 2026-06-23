@@ -292,15 +292,31 @@ function StaffHome({ onChangeView }: { onChangeView: (v: StaffView) => void }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {HOME_ACTIONS.map((action) => {
           const Icon = action.icon;
-          return (
+          const isScan = action.id === "scan";
+          const button = (
             <button
               key={action.id}
               onClick={() => onChangeView(action.id)}
-              className={`flex flex-col items-center justify-center gap-3 rounded-2xl p-6 text-white shadow-lg active:scale-95 transition-transform min-h-[140px] sm:min-h-[120px] ${action.color}`}
+              className={`flex flex-col items-center justify-center gap-3 rounded-2xl p-6 text-white shadow-lg active:scale-95 transition-transform min-h-[140px] sm:min-h-[120px] w-full h-full ${action.color}`}
             >
               <Icon className="h-11 w-11" strokeWidth={1.8} />
               <span className="text-base font-bold leading-tight text-center">{action.label}</span>
             </button>
+          );
+
+          if (!isScan) return button;
+
+          return (
+            <div key={action.id} className="relative h-full overflow-hidden rounded-2xl">
+              {button}
+              <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 w-[170%] -translate-x-1/2 -translate-y-1/2 -rotate-45 overflow-hidden">
+                <div className="flex items-center justify-center bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-300 px-4 py-2 shadow-md ring-1 ring-black/5">
+                  <span className="whitespace-nowrap text-[9px] font-bold uppercase tracking-[0.15em] text-yellow-950 sm:text-[11px]">
+                    Dalam Pengembangan
+                  </span>
+                </div>
+              </div>
+            </div>
           );
         })}
       </div>
@@ -990,6 +1006,7 @@ function AddItemTask({
     return frequencyUnit === "hari" ? val : val * 7;
   }, [frequencyValue, frequencyUnit]);
   const [barcode, setBarcode] = useState(preFilledBarcode || "");
+  const [showScanner, setShowScanner] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -998,6 +1015,13 @@ function AddItemTask({
   }, [preFilledBarcode]);
 
   const canSave = name.trim() && unit.trim() && category.trim() && minStock && Number(minStock) >= 0;
+
+  const handleScan = (value: string) => {
+    const clean = value.trim();
+    console.log("[add-item] scanned barcode:", clean);
+    setBarcode(clean);
+    setShowScanner(false);
+  };
 
   const handleSave = () => {
     if (!canSave) return;
@@ -1127,12 +1151,40 @@ function AddItemTask({
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-muted-foreground">Barcode</label>
-        <Input
-          value={barcode}
-          onChange={(e) => setBarcode(e.target.value)}
-          placeholder="Ketik barcode"
-          className="h-14 sm:h-12 text-base"
-        />
+        <div className="flex gap-2">
+          <Input
+            value={barcode}
+            onChange={(e) => setBarcode(e.target.value)}
+            placeholder="Ketik barcode"
+            className="h-14 sm:h-12 text-base flex-1"
+          />
+          <div className="relative overflow-hidden rounded-md">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-14 sm:h-12 px-3"
+              onClick={() => setShowScanner((v) => !v)}
+              title={showScanner ? "Tutup scanner" : "Scan barcode"}
+            >
+              <ScanBarcode className="h-5 w-5" />
+            </Button>
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 w-[180%] -translate-x-1/2 -translate-y-1/2 -rotate-45 overflow-hidden">
+              <div className="flex items-center justify-center bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-300 px-2 py-0.5 shadow-sm ring-1 ring-black/5">
+                <span className="whitespace-nowrap text-[8px] font-bold uppercase tracking-wider text-yellow-950">
+                  Dev
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {showScanner && (
+          <div className="pt-2">
+            <BarcodeScanner
+              onScan={handleScan}
+              onError={(err) => console.error("[add-item] scanner error:", err)}
+            />
+          </div>
+        )}
       </div>
 
       <Button

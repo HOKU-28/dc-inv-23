@@ -13,10 +13,13 @@ interface BarcodeScannerProps {
 const SCANNER_ID = "barcode-scanner-view";
 
 const SCANNER_CONFIG = {
-  fps: 15,
-  qrbox: { width: 300, height: 120 },
+  fps: 10,
+  qrbox: { width: 280, height: 110 },
   aspectRatio: 1.777,
   disableFlip: false,
+  // Pakai ZXing decoder agar hasil scan lebih konsisten di berbagai device,
+  // daripada native BarcodeDetector yang perilakunya bervariasi.
+  useBarCodeDetectorIfSupported: false,
   formatsToSupport: [
     Html5QrcodeSupportedFormats.QR_CODE,
     Html5QrcodeSupportedFormats.CODE_128,

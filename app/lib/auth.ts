@@ -107,7 +107,12 @@ export function getUsers(): User[] {
 
 export function saveUsers(users: User[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  try {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Gagal menyimpan data pengguna.";
+    throw new Error(`Penyimpanan penuh atau tidak tersedia: ${message}`);
+  }
 }
 
 export function hasOwner(): boolean {
@@ -266,7 +271,11 @@ function readLoginAttempts(): Record<string, LoginAttempt> {
 
 function writeLoginAttempts(attempts: Record<string, LoginAttempt>) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(LOGIN_ATTEMPTS_KEY, JSON.stringify(attempts));
+  try {
+    localStorage.setItem(LOGIN_ATTEMPTS_KEY, JSON.stringify(attempts));
+  } catch {
+    // Login attempts are non-critical; ignore storage errors.
+  }
 }
 
 function getAttemptKey(email: string): string {
@@ -293,6 +302,12 @@ function recordFailedLogin(email: string) {
   const key = getAttemptKey(email);
   const now = Date.now();
   const current = attempts[key] ?? { count: 0, firstAttemptAt: now };
+
+  // Once locked, don't keep incrementing the counter.
+  if (current.lockedUntil && now < current.lockedUntil) {
+    return;
+  }
+
   current.count += 1;
 
   if (current.count >= MAX_LOGIN_ATTEMPTS) {
@@ -348,8 +363,13 @@ async function createSession(
   };
 
   if (typeof window !== "undefined") {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    localStorage.setItem("dominico-role", user.role);
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      localStorage.setItem("dominico-role", user.role);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal menyimpan sesi.";
+      throw new Error(`Penyimpanan penuh atau tidak tersedia: ${message}`);
+    }
   }
 
   return session;

@@ -1,4 +1,4 @@
-import { supabase, isOnline } from "@/app/lib/supabase";
+import { supabase, isOnline, isSupabaseConfigured } from "@/app/lib/supabase";
 import { Item, StockLog, Sale } from "@/app/types";
 
 const ITEMS_KEY = "dominico-items";
@@ -9,6 +9,16 @@ let syncing = false;
 
 export function isSyncing(): boolean {
   return syncing;
+}
+
+function isNetworkError(error: { message?: string; details?: string } | null): boolean {
+  const text = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+  return text.includes("failed to fetch") || text.includes("networkerror");
+}
+
+function logSyncError(label: string, error: { message?: string; details?: string } | null): void {
+  if (isNetworkError(error)) return;
+  console.error(label, error);
 }
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -60,21 +70,23 @@ function rowToItem(row: Record<string, unknown>): Item {
 
 export async function pushItems(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const items = readLocal<Item[]>(ITEMS_KEY, []);
   if (items.length === 0) return;
 
   const rows = items.map(itemToRow);
   const { error } = await supabase.from("items").upsert(rows, { onConflict: "id" });
   if (error) {
-    console.error("[sync] Failed to push items:", error);
+    logSyncError("[sync] Failed to push items:", error);
   }
 }
 
 export async function pullItems(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const { data, error } = await supabase.from("items").select("*");
   if (error || !data) {
-    console.error("[sync] Failed to pull items:", error);
+    logSyncError("[sync] Failed to pull items:", error);
     return;
   }
 
@@ -126,12 +138,13 @@ function rowToLog(row: StockLogRow): StockLog {
 
 export async function pushLogs(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const logs = readLocal<StockLog[]>(LOGS_KEY, []);
 
   const rows = logs.map(logToRow);
   const { error } = await supabase.from("stock_logs").upsert(rows, { onConflict: "id" });
   if (error) {
-    console.error("[sync] Failed to push logs:", error);
+    logSyncError("[sync] Failed to push logs:", error);
     return;
   }
 
@@ -146,16 +159,17 @@ export async function pushLogs(): Promise<void> {
   if (idsToDelete.length > 0) {
     const { error: deleteError } = await supabase.from("stock_logs").delete().in("id", idsToDelete);
     if (deleteError) {
-      console.error("[sync] Failed to delete remote logs:", deleteError);
+      logSyncError("[sync] Failed to delete remote logs:", deleteError);
     }
   }
 }
 
 export async function pullLogs(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const { data, error } = await supabase.from("stock_logs").select("*");
   if (error || !data) {
-    console.error("[sync] Failed to pull logs:", error);
+    logSyncError("[sync] Failed to pull logs:", error);
     return;
   }
 
@@ -200,12 +214,13 @@ function rowToSale(row: SaleRow): Sale {
 
 export async function pushSales(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const sales = readLocal<Sale[]>(SALES_KEY, []);
 
   const rows = sales.map(saleToRow);
   const { error } = await supabase.from("sales").upsert(rows, { onConflict: "id" });
   if (error) {
-    console.error("[sync] Failed to push sales:", error);
+    logSyncError("[sync] Failed to push sales:", error);
     return;
   }
 
@@ -220,16 +235,17 @@ export async function pushSales(): Promise<void> {
   if (idsToDelete.length > 0) {
     const { error: deleteError } = await supabase.from("sales").delete().in("id", idsToDelete);
     if (deleteError) {
-      console.error("[sync] Failed to delete remote sales:", deleteError);
+      logSyncError("[sync] Failed to delete remote sales:", deleteError);
     }
   }
 }
 
 export async function pullSales(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const { data, error } = await supabase.from("sales").select("*");
   if (error || !data) {
-    console.error("[sync] Failed to pull sales:", error);
+    logSyncError("[sync] Failed to pull sales:", error);
     return;
   }
 
@@ -250,17 +266,20 @@ export async function pullSales(): Promise<void> {
 
 export async function pushToSupabase(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   await Promise.all([pushItems(), pushLogs(), pushSales()]);
 }
 
 export async function pullFromSupabase(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   await Promise.all([pullItems(), pullLogs(), pullSales()]);
 }
 
 export async function syncAll(): Promise<void> {
   if (syncing) return;
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
 
   syncing = true;
   try {
@@ -277,15 +296,18 @@ export async function syncAll(): Promise<void> {
 
 export async function syncItems(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   await pushItems();
 }
 
 export async function syncLogs(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   await pushLogs();
 }
 
 export async function syncSales(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   await pushSales();
 }

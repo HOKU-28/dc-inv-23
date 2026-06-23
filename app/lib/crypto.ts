@@ -26,14 +26,29 @@ function base64UrlToBuffer(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function getCrypto(): Crypto {
+  if (typeof crypto === "undefined") {
+    throw new Error("Web Crypto API tidak tersedia. Pastikan akses aman (HTTPS/localhost) dan browser mendukungnya.");
+  }
+  return crypto;
+}
+
+function getSubtleCrypto(): SubtleCrypto {
+  const c = getCrypto();
+  if (!c.subtle) {
+    throw new Error("Web Crypto API tidak tersedia. Pastikan akses aman (HTTPS/localhost) dan browser mendukungnya.");
+  }
+  return c.subtle;
+}
+
 async function sha256(input: string): Promise<ArrayBuffer> {
   const encoder = new TextEncoder();
   const data = encoder.encode(input);
-  return crypto.subtle.digest("SHA-256", data);
+  return getSubtleCrypto().digest("SHA-256", data);
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const saltBytes = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const saltBytes = getCrypto().getRandomValues(new Uint8Array(SALT_BYTES));
   const salt = bufferToBase64Url(saltBytes.buffer);
   const hashBuffer = await sha256(salt + password);
   const hash = bufferToBase64Url(hashBuffer);
@@ -60,7 +75,7 @@ export async function verifyPassword(
 
 export function generateRecoveryCode(): string {
   const array = new Uint8Array(RECOVERY_CODE_LENGTH);
-  crypto.getRandomValues(array);
+  getCrypto().getRandomValues(array);
   let code = "";
   for (let i = 0; i < RECOVERY_CODE_LENGTH; i++) {
     code += RECOVERY_CODE_CHARS[array[i] % RECOVERY_CODE_CHARS.length];

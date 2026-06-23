@@ -2,7 +2,7 @@ import { Item, StockLog, Sale, MonthlyUsage, ItemStatus, ReorderSuggestion, Dail
 import { removeFromShoppingById } from "@/app/lib/shopping-list";
 import { syncItems, syncLogs, syncSales } from "@/app/lib/sync";
 import { pushDailyQueue } from "@/app/lib/sync-extra";
-import { supabase, isOnline } from "@/app/lib/supabase";
+import { supabase, isOnline, isSupabaseConfigured } from "@/app/lib/supabase";
 
 const ITEMS_KEY = "dominico-items";
 const LOGS_KEY = "dominico-logs";
@@ -278,8 +278,8 @@ export async function deleteItem(id: string): Promise<boolean> {
   // Remove from shopping list if present.
   removeFromShoppingById(id);
 
-  // Delete from Supabase if online.
-  if (isOnline()) {
+  // Delete from Supabase if online and configured.
+  if (isOnline() && isSupabaseConfigured) {
     const { error } = await supabase.from("items").delete().eq("id", id);
     if (error) {
       console.error("[data] deleteItem remote failed:", error);

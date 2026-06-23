@@ -1,4 +1,4 @@
-import { supabase, isOnline } from "@/app/lib/supabase";
+import { supabase, isOnline, isSupabaseConfigured } from "@/app/lib/supabase";
 import { DailyQueue } from "@/app/types";
 import { getUsers, saveUsers, User } from "@/app/lib/auth";
 import {
@@ -15,8 +15,14 @@ function isSchemaError(error: { code?: string } | null): boolean {
   return error?.code === "PGRST204" || error?.code === "PGRST205";
 }
 
-function logSyncError(label: string, error: { code?: string } | null): void {
+function isNetworkError(error: { message?: string; details?: string } | null): boolean {
+  const text = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+  return text.includes("failed to fetch") || text.includes("networkerror");
+}
+
+function logSyncError(label: string, error: { code?: string; message?: string; details?: string } | null): void {
   if (isSchemaError(error)) return;
+  if (isNetworkError(error)) return;
   console.error(label, error);
 }
 
@@ -78,6 +84,7 @@ function rowToUser(row: Record<string, unknown>): User {
 
 export async function pushUsers(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const users = getUsers();
   if (users.length === 0) return;
   const rows = users.map(userToRow);
@@ -89,6 +96,7 @@ export async function pushUsers(): Promise<void> {
 
 export async function pullUsers(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const { data, error } = await supabase.from("users").select("*");
   if (error || !data) {
     if (error) logSyncError("[sync-extra] pullUsers failed:", error);
@@ -115,6 +123,7 @@ export async function pullUsers(): Promise<void> {
 
 export async function pushShoppingList(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const ids = getShoppingIds();
   const rows = ids.map((id) => ({ id, item_id: id, created_at: Date.now() }));
 
@@ -141,6 +150,7 @@ export async function pushShoppingList(): Promise<void> {
 
 export async function pullShoppingList(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const { data, error } = await supabase.from("shopping_list").select("*");
   if (error || !data) {
     if (error) logSyncError("[sync-extra] pullShoppingList failed:", error);
@@ -157,6 +167,7 @@ export async function pullShoppingList(): Promise<void> {
 
 export async function pushDailyQueue(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const queue = readDailyQueue();
   if (!queue) return;
   const row = {
@@ -172,6 +183,7 @@ export async function pushDailyQueue(): Promise<void> {
 
 export async function pullDailyQueue(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   const local = readDailyQueue();
   const date = local?.date ?? new Date().toISOString().split("T")[0];
   const { data, error } = await supabase.from("daily_queue").select("*").eq("date", date).maybeSingle();
@@ -213,18 +225,21 @@ async function checkExtraSchema(): Promise<boolean> {
 
 export async function pushExtra(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   if (!(await checkExtraSchema())) return;
   await Promise.all([pushUsers(), pushShoppingList(), pushDailyQueue()]);
 }
 
 export async function pullExtra(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   if (!(await checkExtraSchema())) return;
   await Promise.all([pullUsers(), pullShoppingList(), pullDailyQueue()]);
 }
 
 export async function syncExtra(): Promise<void> {
   if (!isOnline()) return;
+  if (!isSupabaseConfigured) return;
   if (!(await checkExtraSchema())) return;
   await pushExtra();
   await pullExtra();
